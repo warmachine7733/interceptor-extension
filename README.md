@@ -1,4 +1,4 @@
-# Local API Mock
+# API Mock
 
 A minimal Chromium Manifest V3 extension for development-time API mocking. It intercepts `fetch` and `XMLHttpRequest`, supports request URL/method/header/body overrides, and returns configured local mock responses.
 
