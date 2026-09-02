@@ -1,3 +1,69 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local API Mock</title><link rel="stylesheet" href="options.css"></head>
-<body><main><header><div><h1>Local API Mock</h1><p>Rules stay in this browser. No network data is collected or sent.</p></div><label class="switch"><input id="enabled" type="checkbox" checked> Enable mocking</label></header><section id="rules"></section><button id="add" type="button">Add rule</button><footer><a href="https://www.gnu.org/licenses/agpl-3.0.en.html" target="_blank">AGPL-3.0 license</a> · Source must be available when this extension is distributed.</footer></main><script src="options.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local API Mock</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-content">
+        <div class="header-left">
+          <h1 class="app-title">
+            <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="1"></circle>
+              <path d="M12 1v6m0 6v6"></path>
+              <path d="M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24"></path>
+              <path d="M19.78 4.22l-4.24 4.24m-2.12 2.12l-4.24 4.24"></path>
+            </svg>
+            API Mock
+          </h1>
+          <p class="header-subtitle">Local request interception & response mocking</p>
+        </div>
+        <div class="header-right">
+          <div class="toggle-container">
+            <label class="switch">
+              <input id="enabled" type="checkbox" checked>
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-label" id="toggle-status">Active</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-info">
+        <p class="info-text">Rules are stored locally in your browser. No data is sent to external services.</p>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <div class="rules-container">
+        <div class="rules-header">
+          <h2 class="rules-title">API Rules</h2>
+          <button id="add" class="btn btn-primary btn-add" type="button">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add Rule
+          </button>
+        </div>
+        <section id="rules" class="rules-list"></section>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <div class="footer-content">
+        <p class="footer-text">
+          <a href="https://www.gnu.org/licenses/agpl-3.0.en.html" target="_blank" rel="noopener noreferrer">AGPL-3.0 License</a>
+          <span class="separator">•</span>
+          <span>Open source. Source code required when distributed.</span>
+        </p>
+      </div>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

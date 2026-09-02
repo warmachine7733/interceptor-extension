@@ -10,6 +10,6 @@
   "keywords": ["chrome", "extension", "api", "mock", "testing", "development"],
   "scripts": {
     "test": "node --test test/rules.test.mjs",
-    "build": "rm -rf dist && mkdir dist && zip -r dist/local-api-mock.zip manifest.json background.js bridge.js rules.js page-interceptor.js options.html options.css options.js LICENSE README.md"
+    "build": "npx rimraf dist && npx mkdirp dist && npx bestzip dist/local-api-mock.zip manifest.json background.js bridge.js rules.js page-interceptor.js options.html options.css options.js LICENSE README.md"
   }
 }
