@@ -22,8 +22,16 @@ const ruleTemplate = (rule) => `<article class="rule accordion-item" data-id="${
 
 function readPath(object, path) { return path.split(".").reduce((value, key) => value[key], object); }
 function writePath(object, path, value) { const parts = path.split("."); const last = parts.pop(); parts.reduce((target, key) => target[key], object)[last] = value; }
-function render() { 
-  rulesElement.innerHTML = state.rules.map(ruleTemplate).join(""); 
+function render() {
+  rulesElement.innerHTML = state.rules.map(ruleTemplate).join("")
+    .replaceAll('<button class="accordion-header" type="button">', '<div class="accordion-header" role="button" tabindex="0">')
+    .replaceAll('</button><div class="accordion-body">', '</div><div class="accordion-body">');
+  rulesElement.querySelectorAll(".rule").forEach((ruleElement) => {
+    const deleteButton = $(".delete", ruleElement);
+    const methodBadge = $(".method-badge", ruleElement);
+    methodBadge.before(deleteButton);
+    deleteButton.classList.add("method-badge", "method-delete");
+  });
   setupAccordion();
 }
 
@@ -31,6 +39,7 @@ function setupAccordion() {
   const headers = document.querySelectorAll(".accordion-header");
   headers.forEach(header => {
     header.addEventListener("click", function(event) {
+      if (event.target.closest(".delete")) return;
       event.preventDefault();
       const accordionItem = this.closest(".accordion-item");
       const isOpen = accordionItem.classList.contains("open");
@@ -43,6 +52,12 @@ function setupAccordion() {
       // Open current if it was closed
       if (!isOpen) {
         accordionItem.classList.add("open");
+      }
+    });
+    header.addEventListener("keydown", function(event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.click();
       }
     });
   });
