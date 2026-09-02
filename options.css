@@ -203,7 +203,7 @@ input:checked + .slider:before {
 .rules-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 /* Rule Card Styles */
@@ -211,11 +211,11 @@ input:checked + .slider:before {
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 24px;
   box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
-  display: grid;
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .rule:hover {
@@ -223,22 +223,49 @@ input:checked + .slider:before {
   border-color: var(--primary);
 }
 
-.rule-head {
+/* Accordion Header */
+.accordion-header {
+  background: transparent;
+  border: none;
+  padding: 16px 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  transition: all 0.2s ease;
+  text-align: left;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.accordion-header:hover {
+  background: rgba(74, 144, 226, 0.05);
+}
+
+.accordion-item.open .accordion-header {
+  background: rgba(74, 144, 226, 0.08);
+  border-bottom-color: var(--primary);
+}
+
+.accordion-title {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
+  flex: 1;
+  min-width: 0;
 }
 
-.rule-head input[type="checkbox"] {
+.rule-enabled {
   width: 20px;
   height: 20px;
   cursor: pointer;
   accent-color: var(--primary);
+  flex-shrink: 0;
 }
 
-.rule-head input[type="text"] {
+.rule-name-input {
   flex: 1;
   font-size: 16px;
   font-weight: 600;
@@ -247,11 +274,71 @@ input:checked + .slider:before {
   background: transparent;
   padding: 0;
   margin: 0;
+  min-width: 0;
 }
 
-.rule-head input[type="text"]:focus {
+.rule-name-input:focus {
   outline: none;
   color: var(--primary);
+}
+
+.accordion-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.3s ease;
+}
+
+.accordion-item.open .accordion-icon {
+  transform: rotate(180deg);
+  color: var(--primary);
+}
+
+.accordion-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 2;
+}
+
+/* Accordion Body */
+.accordion-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+
+.accordion-item.open .accordion-body {
+  max-height: 2000px;
+  opacity: 1;
+}
+
+.accordion-content {
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+}
+
+.delete {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.delete:hover {
+  background: rgba(231, 76, 60, 0.1);
+  border-color: var(--danger);
+  color: var(--danger-hover);
 }
 
 /* HTTP Method Badge */
@@ -432,21 +519,6 @@ button {
 .btn-add .icon {
   width: 18px;
   height: 18px;
-}
-
-.delete {
-  background: transparent;
-  color: var(--danger);
-  border: 1px solid var(--border);
-  padding: 6px 12px;
-  margin-left: auto;
-  font-size: 12px;
-}
-
-.delete:hover {
-  background: rgba(231, 76, 60, 0.1);
-  border-color: var(--danger);
-  color: var(--danger-hover);
 }
 
 /* Footer */
