@@ -394,6 +394,7 @@ label {
 }
 
 input[type="text"],
+input:not([type]),
 input[type="number"],
 select,
 textarea {
@@ -407,6 +408,7 @@ textarea {
 }
 
 input[type="text"]:focus,
+input:not([type]):focus,
 input[type="number"]:focus,
 select:focus,
 textarea:focus {
