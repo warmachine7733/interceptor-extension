@@ -323,10 +323,16 @@ input:checked + .slider:before {
   gap: 20px;
 }
 
-.delete.method-badge {
-  border: none;
+.delete {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
   cursor: pointer;
   font-family: inherit;
+}
+
+.delete:hover {
+  background: #ffcdd2;
 }
 
 /* HTTP Method Badge */

@@ -30,7 +30,6 @@ function render() {
     const deleteButton = $(".delete", ruleElement);
     const methodBadge = $(".method-badge", ruleElement);
     methodBadge.before(deleteButton);
-    deleteButton.classList.add("method-badge", "method-delete");
   });
   setupAccordion();
 }
