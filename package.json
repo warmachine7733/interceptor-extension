@@ -1,6 +1,6 @@
 {
   "name": "local-api-mock-extension",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A minimal Chromium Manifest V3 extension for development-time API mocking",
   "license": "AGPL-3.0-or-later",
   "repository": {
@@ -10,6 +10,6 @@
   "keywords": ["chrome", "extension", "api", "mock", "testing", "development"],
   "scripts": {
     "test": "node --test test/rules.test.mjs",
-    "build": "npx rimraf dist && npx mkdirp dist && npx bestzip dist/local-api-mock.zip manifest.json background.js bridge.js rules.js page-interceptor.js options.html options.css options.js LICENSE README.md"
+    "build": "npx rimraf dist && npx mkdirp dist && npx bestzip dist/local-api-mock.zip manifest.json background.js bridge.js rules.js page-interceptor.js options.html options.css options.js icons LICENSE README.md"
   }
 }
