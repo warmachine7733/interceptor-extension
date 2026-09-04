@@ -2,6 +2,8 @@ const $ = (selector, element = document) => element.querySelector(selector);
 const rulesElement = $("#rules");
 let state = { enabled: true, rules: [] };
 
+$("#version-name").textContent = `v${chrome.runtime.getManifest().version}`;
+
 const makeRule = () => ({
   id: crypto.randomUUID(),
   enabled: true,

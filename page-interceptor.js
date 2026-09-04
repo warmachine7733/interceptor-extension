@@ -3,7 +3,23 @@
   window.__LOCAL_API_MOCK_INSTALLED__ = true;
 
   let config = { enabled: true, rules: [] };
-  const { firstMatch, parseHeaders } = window.ApiMockRules;
+  const rules = window.ApiMockRules || (() => {
+    const normalizeMethod = (method) => (method || "*").toUpperCase();
+    const patternToRegex = (pattern) => new RegExp(`^${String(pattern || "*")
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
+    const firstMatch = (rules, url, method) => (rules || []).find((rule) => {
+      if (!rule?.enabled || !patternToRegex(rule.match?.urlPattern).test(url)) return false;
+      const expectedMethod = normalizeMethod(rule.match?.method);
+      return expectedMethod === "*" || expectedMethod === normalizeMethod(method);
+    }) || null;
+    const parseHeaders = (headers) => {
+      if (!headers) return {};
+      if (typeof headers === "object") return headers;
+      try { return JSON.parse(headers); } catch { return {}; }
+    };
+    return { firstMatch, parseHeaders };
+  })();
+  const { firstMatch, parseHeaders } = rules;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Number(ms) || 0));
 
   window.addEventListener("message", (event) => {
