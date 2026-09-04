@@ -1,5 +1,5 @@
 (() => {
-  const { firstMatch } = globalThis.ApiMockRules;
+  const { firstMatch } = window.ApiMockRules;
   const sendConfig = () => {
     chrome.storage.local.get({ enabled: true, rules: [] }, (config) => {
       window.postMessage({ source: "local-api-mock", type: "config", config }, "*");

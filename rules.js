@@ -23,5 +23,5 @@
     try { return JSON.parse(headers); } catch { return {}; }
   };
 
-  globalThis.ApiMockRules = { firstMatch, parseHeaders, patternToRegex };
+  window.ApiMockRules = { firstMatch, parseHeaders, patternToRegex };
 })();

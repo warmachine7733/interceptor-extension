@@ -1,6 +1,6 @@
 {
   "name": "local-api-mock-extension",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A minimal Chromium Manifest V3 extension for development-time API mocking",
   "license": "AGPL-3.0-or-later",
   "repository": {

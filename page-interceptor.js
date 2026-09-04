@@ -3,7 +3,7 @@
   window.__LOCAL_API_MOCK_INSTALLED__ = true;
 
   let config = { enabled: true, rules: [] };
-  const { firstMatch, parseHeaders } = globalThis.ApiMockRules;
+  const { firstMatch, parseHeaders } = window.ApiMockRules;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Number(ms) || 0));
 
   window.addEventListener("message", (event) => {

@@ -19,9 +19,9 @@ test("All scripts have valid syntax", () => {
 });
 
 // Test rules.js functionality
-const context = { globalThis: {} };
+const context = { window: {} };
 vm.runInNewContext(fs.readFileSync(new URL("../rules.js", import.meta.url), "utf8"), context);
-const { firstMatch, parseHeaders, patternToRegex } = context.globalThis.ApiMockRules;
+const { firstMatch, parseHeaders, patternToRegex } = context.window.ApiMockRules;
 
 test("URL pattern matching with wildcards", () => {
   const pattern = "https://api.example.com/users/*";
@@ -33,12 +33,12 @@ test("URL pattern matching with wildcards", () => {
 });
 
 test("Headers parsing with various formats", () => {
-  assert.deepEqual(parseHeaders('{"x-test":"value"}'), { "x-test": "value" });
-  assert.deepEqual(parseHeaders({ "x-test": "value" }), { "x-test": "value" });
-  assert.deepEqual(parseHeaders("invalid json"), {});
-  assert.deepEqual(parseHeaders(null), {});
-  assert.deepEqual(parseHeaders(undefined), {});
-  assert.deepEqual(parseHeaders('{"null-header": null, "empty": ""}'), { "null-header": null, "empty": "" });
+  assert.deepEqual({ ...parseHeaders('{"x-test":"value"}') }, { "x-test": "value" });
+  assert.deepEqual({ ...parseHeaders({ "x-test": "value" }) }, { "x-test": "value" });
+  assert.deepEqual({ ...parseHeaders("invalid json") }, {});
+  assert.deepEqual({ ...parseHeaders(null) }, {});
+  assert.deepEqual({ ...parseHeaders(undefined) }, {});
+  assert.deepEqual({ ...parseHeaders('{"null-header": null, "empty": ""}') }, { "null-header": null, "empty": "" });
 });
 
 test("Header case preservation", () => {

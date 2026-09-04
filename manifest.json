@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local API Mock",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Locally modify API requests and mock API responses for development.",
   "permissions": ["storage"],
   "host_permissions": ["http://*/*", "https://*/*", "file://*/*"],
