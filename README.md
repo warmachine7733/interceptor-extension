@@ -8,7 +8,11 @@ A minimal Chromium Manifest V3 extension for development-time API mocking. It in
 - ✅ Request overrides (URL, method, headers, body)
 - ✅ Local rule storage (no cloud, no telemetry)
 - ✅ URL pattern matching with wildcards
-- ✅ Enable/disable toggle
+- ✅ Query-parameter matching, including wildcard values
+- ✅ Publish-based rule editing so drafts do not apply while typing
+- ✅ Enable/disable toggle, inactive by default
+- ✅ On-page snackbar when a rule intercepts a request, with countdown
+- ✅ `[API Mock]` console logs for mocked, rewritten, and passthrough requests
 - ✅ Minimal UI, no dependencies
 
 **Not included:**
@@ -22,7 +26,8 @@ A minimal Chromium Manifest V3 extension for development-time API mocking. It in
 1. Open `chrome://extensions` and enable **Developer mode** (top right)
 2. Select **Load unpacked** and choose this repository folder
 3. Click the extension icon to open **Local API Mock** settings
-4. Add a rule (see examples below)
+4. Add a rule, configure it, and click **Publish Rule**
+5. Turn the global toggle to **Active** when you want rules to apply
 
 ## Quick start
 
@@ -46,6 +51,10 @@ fetch("https://api.example.com/users/1")
   .then(d => console.log(d))  // Logs: {id: 1, name: "John"}
 ```
 
+When the rule fires, a snackbar appears on the page showing the rule name,
+method, URL, and a countdown bar before it disappears. The page console also
+receives a `[API Mock] mocked ...` log with the matched rule attached.
+
 ### Example 2: Override a request before sending
 
 Create a rule to change a POST to GET:
@@ -66,6 +75,22 @@ The request is modified before hitting the real API (no mock response sent).
 - `https://api.example.com/*` — matches all paths under api.example.com
 - `https://api.example.com/users/*` — matches /users/1, /users/2, etc.
 - `https://api.*.com/*` — matches api.example.com, api.other.com, etc.
+- `https://api.example.com/posts/1?test=1234` — matches this exact query string
+- `https://api.example.com/posts/1?test=*` — matches any value for `test`
+- `https://api.example.com/posts/1*` — matches the URL with or without query parameters
+
+The URL pattern matches the complete request URL. Query parameters are matched
+literally, while `*` can be used for dynamic values.
+
+## Publishing rules
+
+Changes to a rule are drafts until you click **Publish Rule**. This prevents a
+partially edited URL, method, header, or response body from affecting requests.
+New rules are also drafts and do not apply until published. Deleting a rule and
+changing the global Active/Inactive toggle apply immediately.
+
+The extension starts **Inactive** by default. Enable the global toggle before
+testing a published rule. Individual rules must also be enabled.
 
 ## Rules explained
 
@@ -86,22 +111,27 @@ The request is modified before hitting the real API (no mock response sent).
 | Issue | Solution |
 |-------|----------|
 | Extension not intercepting | Reload extension: `chrome://extensions` → Find Local API Mock → click reload icon |
-| Rule not matching | Check URL pattern with wildcards, enable the rule checkbox |
-| "Enable mocking" is off | Click the checkbox in options page to turn it on |
+| Rule not matching | Check the complete URL pattern, use `*` for dynamic path or query values, publish the rule, and enable the rule checkbox |
+| Extension is inactive | Turn the global toggle to **Active** in the options page |
+| Changes have no effect | Click **Publish Rule** after editing the rule |
 | No mock response showing | Verify "Return mock response" is checked in the rule |
 | Response headers not appearing | Make sure to add them in JSON format: `{"header-name": "value"}` |
+| Need to inspect interception | Open the target page's DevTools console and filter for `[API Mock]` |
 
 ## Building
 
 ```bash
 npm install  # Install dev dependencies
 npm run build  # Create dist/local-api-mock.zip
-npm test   # Run rule matching tests
+npm test   # Run the primary rule matching tests
+node --test test/  # Run all tests
 ```
 
 ## Testing
 
 See [TESTING.md](TESTING.md) for detailed test scenarios and [FIXES.md](FIXES.md) for bug fixes applied.
+The build runs `sync-version.mjs` before packaging, keeping `package.json` and
+`manifest.json` on the same version. The current release is **1.1.0**.
 
 ## Rules
 
