@@ -39,8 +39,6 @@
         "color:#22c55e;font-weight:bold", "color:inherit", "background:#334155;color:#fff;padding:0 4px;border-radius:3px", "color:inherit",
         logRule
       );
-    } else if (config.enabled) {
-      console.log(`%c[API Mock]%c passthrough %c${method}%c ${url}`, "color:#94a3b8;font-weight:bold", "color:inherit", "background:#e2e8f0;color:#334155;padding:0 4px;border-radius:3px", "color:inherit");
     }
   };
   const toastState = { container: null, lastShown: new Map() };
