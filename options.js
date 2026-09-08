@@ -33,6 +33,22 @@ function render() {
   if (!selectedRuleId || !state.rules.some((rule) => rule.id === selectedRuleId)) selectedRuleId = state.rules[0]?.id || null;
   const selectedRule = state.rules.find((rule) => rule.id === selectedRuleId);
   rulesElement.innerHTML = `<aside class="mock-rail"><div class="rail-heading"><span>Mocks</span><span class="rail-count">${state.rules.length}</span></div><div class="mock-list">${state.rules.map(listTemplate).join("")}</div><button id="rail-add" class="rail-add" type="button"><span>+</span> New mock</button></aside><section class="editor-stage">${selectedRule ? editorTemplate(selectedRule) : `<div class="empty-editor"><strong>No mocks yet</strong><span>Create a mock to start building a response.</span><button id="empty-add" class="btn btn-primary" type="button">+ New mock</button></div>`}</section>`;
+  const responseMeta = $(".response-meta");
+  if (responseMeta) {
+    const controls = responseMeta.querySelectorAll("label");
+    if (controls[0]) {
+      controls[0].classList.add("response-toggle-control");
+      const checkbox = $("input", controls[0]);
+      const labelText = document.createElement("span");
+      labelText.textContent = controls[0].childNodes[0]?.textContent?.trim() || "Return mock response";
+      controls[0].childNodes[0]?.remove();
+      controls[0].prepend(checkbox);
+      controls[0].append(labelText);
+    }
+    controls[1]?.classList.add("response-status-control");
+    controls[2]?.classList.add("response-delay-control");
+    controls[3]?.classList.add("response-headers-control");
+  }
 }
 
 function markDirty(editor) { editor.classList.add("dirty"); const button = $(".publish", editor); if (button) button.disabled = false; }
