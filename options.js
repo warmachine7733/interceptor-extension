@@ -24,6 +24,17 @@ const pathPreview = (pattern) => {
 
 function writePath(object, path, value) { const parts = path.split("."); const last = parts.pop(); parts.reduce((target, key) => target[key], object)[last] = value; }
 function persist(callback) { chrome.storage.local.set({ enabled: state.enabled, rules: state.rules.filter((rule) => !rule._isNew) }, callback); }
+function parsePastedJson(value) {
+  try { return JSON.parse(value); } catch {}
+  const normalizedKeys = String(value)
+    .replace(/([{,]\s*)([A-Za-z_$][\w$-]*)\s*:/g, '$1"$2":')
+    .replace(/,\s*([}\]])/g, "$1");
+  const normalizedStrings = normalizedKeys.replace(/'((?:\\.|[^'\\])*)'/g, (_, content) => {
+    const decoded = content.replace(/\\'/g, "'").replace(/\\\\/g, "\\");
+    return JSON.stringify(decoded);
+  });
+  return JSON.parse(normalizedStrings);
+}
 
 const listTemplate = (rule) => `<article class="mock-item ${rule.id === selectedRuleId ? "selected" : ""}" data-id="${esc(rule.id)}"><button class="mock-select" type="button" aria-label="Open ${esc(rule.name)}"><span class="mock-topline"><input class="rule-enabled" type="checkbox" ${rule.enabled ? "checked" : ""} aria-label="Enable ${esc(rule.name)}"><span class="mock-name">${esc(rule.name)}</span><span class="mock-more" aria-hidden="true">&#8942;</span><span class="mock-trash" role="img" aria-label="Delete mock" title="Delete mock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3m-8 0 1 13h8l1-13m-6 4v5m4-5v5"></path></svg></span></span><span class="mock-meta"><span class="method-text ${methodClass(rule.match.method)}">${esc(rule.match.method)}</span><span>${esc(pathPreview(rule.match.urlPattern))}</span></span></button></article>`;
 
@@ -79,7 +90,7 @@ rulesElement.addEventListener("click", (event) => {
   const tab = event.target.closest(".editor-tab");
   if (tab) { activeView = tab.dataset.view; render(); return; }
   const format = event.target.closest(".format-json");
-  if (format) { const body = $("[data-path=\"response.body\"]", editor); try { body.value = JSON.stringify(JSON.parse(body.value), null, 2); format.textContent = "Formatted"; markDirty(editor); setTimeout(() => { format.textContent = "Format JSON"; }, 1000); } catch { format.textContent = "Invalid JSON"; setTimeout(() => { format.textContent = "Format JSON"; }, 1200); } return; }
+  if (format) { const body = $("[data-path=\"response.body\"]", editor); try { body.value = JSON.stringify(parsePastedJson(body.value), null, 2); format.textContent = "Formatted"; markDirty(editor); setTimeout(() => { format.textContent = "Format JSON"; }, 1000); } catch { format.textContent = "Invalid JSON"; setTimeout(() => { format.textContent = "Format JSON"; }, 1200); } return; }
   if (event.target.closest(".delete")) { state.rules = state.rules.filter((rule) => rule.id !== editor.dataset.id); selectedRuleId = state.rules[0]?.id || null; persist(); render(); return; }
   if (event.target.closest(".publish")) {
     const index = state.rules.findIndex((rule) => rule.id === editor.dataset.id);
