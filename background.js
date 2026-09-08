@@ -8,7 +8,7 @@ chrome.action.onClicked.addListener(() => {
 
 chrome.runtime.onInstalled.addListener(() => {
   try {
-    chrome.storage.local.get({ enabled: true, rules: [] }, (result) => {
+    chrome.storage.local.get({ enabled: false, rules: [] }, (result) => {
       if (chrome.runtime.lastError) {
         console.error('Storage error on install:', chrome.runtime.lastError);
         return;

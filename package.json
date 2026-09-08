@@ -1,13 +1,20 @@
 {
   "name": "local-api-mock-extension",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A minimal Chromium Manifest V3 extension for development-time API mocking",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "https://github.com/YOUR_USERNAME/local-api-mock"
   },
-  "keywords": ["chrome", "extension", "api", "mock", "testing", "development"],
+  "keywords": [
+    "chrome",
+    "extension",
+    "api",
+    "mock",
+    "testing",
+    "development"
+  ],
   "scripts": {
     "test": "node --test test/rules.test.mjs",
     "prebuild": "node sync-version.mjs",

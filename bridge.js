@@ -1,12 +1,12 @@
 (() => {
   const { firstMatch } = window.ApiMockRules;
   const sendConfig = () => {
-    chrome.storage.local.get({ enabled: true, rules: [] }, (config) => {
+    chrome.storage.local.get({ enabled: false, rules: [] }, (config) => {
       window.postMessage({ source: "local-api-mock", type: "config", config }, "*");
     });
   };
 
-  let config = { enabled: true, rules: [] };
+  let config = { enabled: false, rules: [] };
   const handledLinks = new WeakSet();
   const matchingStylesheetRule = (link) => config.enabled && link.relList.contains("stylesheet")
     ? firstMatch(config.rules, new URL(link.href, location.href).href, "GET") : null;

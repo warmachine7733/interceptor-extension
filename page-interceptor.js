@@ -2,7 +2,7 @@
   if (window.__LOCAL_API_MOCK_INSTALLED__) return;
   window.__LOCAL_API_MOCK_INSTALLED__ = true;
 
-  let config = { enabled: true, rules: [] };
+  let config = { enabled: false, rules: [] };
   const rules = window.ApiMockRules || (() => {
     const normalizeMethod = (method) => (method || "*").toUpperCase();
     const patternToRegex = (pattern) => new RegExp(`^${String(pattern || "*")
