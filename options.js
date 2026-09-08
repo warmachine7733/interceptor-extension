@@ -1,139 +1,88 @@
 const $ = (selector, element = document) => element.querySelector(selector);
 const rulesElement = $("#rules");
 let state = { enabled: false, rules: [] };
+let selectedRuleId = null;
+let activeView = "response";
 
 $("#version-name").textContent = `v${chrome.runtime.getManifest().version}`;
 
 const makeRule = () => ({
   id: crypto.randomUUID(),
   enabled: true,
-  name: "New API mock",
-  match: { urlPattern: "https://api.example.com/*", method: "*" },
+  name: "JSONPlaceholder post",
+  match: { urlPattern: "https://jsonplaceholder.typicode.com/posts/1?test=*", method: "GET" },
   request: { url: "", method: "", headers: "{}", body: "" },
-  response: { enabled: true, status: 200, statusText: "OK", headers: '{"content-type":"application/json"}', body: "{}", delayMs: 0 }
+  response: { enabled: true, status: 200, statusText: "OK", headers: '{"content-type":"application/json"}', body: '{"id":1,"title":"Mocked post","body":"This response is mocked locally.","userId":1}', delayMs: 0 }
 });
 
-const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
-
-const getMethodBadgeClass = (method) => {
-  const methodMap = { "GET": "method-get", "POST": "method-post", "PUT": "method-put", "PATCH": "method-patch", "DELETE": "method-delete", "HEAD": "method-head", "*": "method-star" };
-  return methodMap[method] || "method-star";
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const methodClass = (method) => `method-${String(method || "*").toLowerCase().replace("*", "star")}`;
+const pathPreview = (pattern) => {
+  try { const url = new URL(String(pattern).replaceAll("*", "preview")); return `${url.pathname}${url.search}`; }
+  catch { return String(pattern || "Any URL"); }
 };
 
-const ruleTemplate = (rule) => `<article class="rule accordion-item" data-id="${rule.id}"><button class="accordion-header" type="button"><div class="accordion-title"><input class="rule-enabled" type="checkbox" ${rule.enabled ? "checked" : ""}><input class="rule-name-input" data-path="name" type="text" placeholder="Rule name" value="${esc(rule.name)}"><span class="method-badge ${getMethodBadgeClass(rule.match.method)}">${esc(rule.match.method)}</span></div><div class="accordion-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></div></button><div class="accordion-body"><div class="accordion-content"><div class="fields"><label>URL Pattern (* wildcard, include ?query to match query params)<input data-path="match.urlPattern" value="${esc(rule.match.urlPattern)}"></label><label>HTTP Method<select data-path="match.method">${["*","GET","POST","PUT","PATCH","DELETE","HEAD"].map((m) => `<option ${rule.match.method === m ? "selected" : ""}>${m}</option>`).join("")}</select></label></div><div class="request"><span class="section-title">Request Override</span><div class="fields"><label>Replacement URL (optional)<input data-path="request.url" placeholder="Leave empty to keep original" value="${esc(rule.request.url)}"></label><label>Replacement Method (optional)<input data-path="request.method" placeholder="GET, POST, etc." value="${esc(rule.request.method)}"></label></div><label>Headers JSON<textarea data-path="request.headers">${esc(rule.request.headers)}</textarea></label><label>Body (optional)<textarea data-path="request.body" placeholder="{}" style="min-height: 80px;">${esc(rule.request.body)}</textarea></label></div><div class="response"><label style="flex-direction: row; gap: 8px;"><input class="response-enabled" type="checkbox" ${rule.response.enabled ? "checked" : ""}><span>Return mock response</span></label><div class="fields"><label>Status Code<input data-path="response.status" type="number" value="${esc(rule.response.status)}"></label><label>Delay (ms)<input data-path="response.delayMs" type="number" value="${esc(rule.response.delayMs)}"></label></div><label>Response Headers JSON<textarea data-path="response.headers">${esc(rule.response.headers)}</textarea></label><label>Response Body<textarea data-path="response.body" placeholder="{}" style="min-height: 120px;">${esc(rule.response.body)}</textarea></label></div></div><div class="rule-footer"><span class="dirty-badge">Unsaved changes</span><button class="publish" type="button" disabled>Publish Rule</button><button class="delete" type="button">Delete</button></div></div></article>`;
-
-function readPath(object, path) { return path.split(".").reduce((value, key) => value[key], object); }
 function writePath(object, path, value) { const parts = path.split("."); const last = parts.pop(); parts.reduce((target, key) => target[key], object)[last] = value; }
+function persist(callback) { chrome.storage.local.set({ enabled: state.enabled, rules: state.rules.filter((rule) => !rule._isNew) }, callback); }
+
+const listTemplate = (rule) => `<article class="mock-item ${rule.id === selectedRuleId ? "selected" : ""}" data-id="${esc(rule.id)}"><button class="mock-select" type="button" aria-label="Open ${esc(rule.name)}"><span class="mock-topline"><input class="rule-enabled" type="checkbox" ${rule.enabled ? "checked" : ""} aria-label="Enable ${esc(rule.name)}"><span class="mock-name">${esc(rule.name)}</span><span class="mock-more" aria-hidden="true">&#8942;</span><span class="mock-trash" role="img" aria-label="Delete mock" title="Delete mock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3m-8 0 1 13h8l1-13m-6 4v5m4-5v5"></path></svg></span></span><span class="mock-meta"><span class="method-text ${methodClass(rule.match.method)}">${esc(rule.match.method)}</span><span>${esc(pathPreview(rule.match.urlPattern))}</span></span></button></article>`;
+
+const editorTemplate = (rule) => `<div class="editor" data-id="${esc(rule.id)}"><div class="request-bar"><select class="editor-method" data-path="match.method" aria-label="HTTP method">${["*","GET","POST","PUT","PATCH","DELETE","HEAD"].map((method) => `<option ${rule.match.method === method ? "selected" : ""}>${method}</option>`).join("")}</select><input class="editor-url" data-path="match.urlPattern" value="${esc(rule.match.urlPattern)}" aria-label="URL pattern"><span class="dirty-badge">Unsaved changes</span><button class="publish" type="button" ${rule._isNew ? "" : "disabled"}>Publish</button></div><div class="editor-tabs" role="tablist"><button class="editor-tab ${activeView === "response" ? "active" : ""}" type="button" data-view="response" role="tab" aria-selected="${activeView === "response"}">Response</button><button class="editor-tab ${activeView === "request" ? "active" : ""}" type="button" data-view="request" role="tab" aria-selected="${activeView === "request"}">Request</button></div><div class="editor-panel ${activeView === "response" ? "active" : ""}" data-panel="response"><div class="response-meta"><label>Return mock response<input class="response-enabled" type="checkbox" ${rule.response.enabled ? "checked" : ""}></label><label>Status<input data-path="response.status" type="number" value="${esc(rule.response.status)}"></label><label>Delay (ms)<input data-path="response.delayMs" type="number" value="${esc(rule.response.delayMs)}"></label><label class="headers-compact">Headers<textarea data-path="response.headers">${esc(rule.response.headers)}</textarea></label></div><div class="body-heading"><span>Response body</span><button class="format-json" type="button">Format JSON</button></div><textarea class="body-editor" data-path="response.body" spellcheck="false">${esc(rule.response.body)}</textarea></div><div class="editor-panel ${activeView === "request" ? "active" : ""}" data-panel="request"><div class="fields"><label>Replacement URL<input data-path="request.url" placeholder="Leave empty to keep original" value="${esc(rule.request.url)}"></label><label>Replacement Method<input data-path="request.method" placeholder="GET, POST, etc." value="${esc(rule.request.method)}"></label></div><label>Request headers<textarea data-path="request.headers">${esc(rule.request.headers)}</textarea></label><label>Request body<textarea class="request-body" data-path="request.body" placeholder="{}">${esc(rule.request.body)}</textarea></label></div></div>`;
+
 function render() {
-  rulesElement.innerHTML = state.rules.map(ruleTemplate).join("")
-    .replaceAll('<button class="accordion-header" type="button">', '<div class="accordion-header" role="button" tabindex="0">')
-    .replaceAll('</button><div class="accordion-body">', '</div><div class="accordion-body">');
-  rulesElement.querySelectorAll(".rule").forEach((ruleElement) => {
-    const deleteButton = $(".delete", ruleElement);
-    const methodBadge = $(".method-badge", ruleElement);
-    methodBadge.before(deleteButton);
-  });
-  setupAccordion();
+  if (!selectedRuleId || !state.rules.some((rule) => rule.id === selectedRuleId)) selectedRuleId = state.rules[0]?.id || null;
+  const selectedRule = state.rules.find((rule) => rule.id === selectedRuleId);
+  rulesElement.innerHTML = `<aside class="mock-rail"><div class="rail-heading"><span>Mocks</span><span class="rail-count">${state.rules.length}</span></div><div class="mock-list">${state.rules.map(listTemplate).join("")}</div><button id="rail-add" class="rail-add" type="button"><span>+</span> New mock</button></aside><section class="editor-stage">${selectedRule ? editorTemplate(selectedRule) : `<div class="empty-editor"><strong>No mocks yet</strong><span>Create a mock to start building a response.</span><button id="empty-add" class="btn btn-primary" type="button">+ New mock</button></div>`}</section>`;
 }
 
-function setupAccordion() {
-  const headers = document.querySelectorAll(".accordion-header");
-  headers.forEach(header => {
-    header.addEventListener("click", function(event) {
-      if (event.target.closest(".delete")) return;
-      if (event.target.closest("input, select, textarea, a")) return;
-      event.preventDefault();
-      const accordionItem = this.closest(".accordion-item");
-      const isOpen = accordionItem.classList.contains("open");
-      
-      // Close all accordion items
-      document.querySelectorAll(".accordion-item").forEach(item => {
-        item.classList.remove("open");
-      });
-      
-      // Open current if it was closed
-      if (!isOpen) {
-        accordionItem.classList.add("open");
-      }
-    });
-    header.addEventListener("keydown", function(event) {
-      if (event.target !== this) return;
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        this.click();
-      }
-    });
-  });
-}
+function markDirty(editor) { editor.classList.add("dirty"); const button = $(".publish", editor); if (button) button.disabled = false; }
+function collectRule(editor, baseRule) { const rule = JSON.parse(JSON.stringify(baseRule)); editor.querySelectorAll("[data-path]").forEach((field) => writePath(rule, field.dataset.path, field.type === "number" ? Number(field.value) : field.value)); rule.enabled = $(".rule-enabled", editor)?.checked ?? rule.enabled; rule.response.enabled = $(".response-enabled", editor)?.checked ?? rule.response.enabled; delete rule._isNew; return rule; }
+function addRule() { const rule = { ...makeRule(), _isNew: true }; state.rules.push(rule); selectedRuleId = rule.id; activeView = "response"; render(); const editor = $(".editor"); markDirty(editor); $(".editor-url", editor)?.focus(); }
 
-function persist() { chrome.storage.local.set({ enabled: state.enabled, rules: state.rules.filter((rule) => !rule._isNew) }); }
-const markDirty = (ruleElement) => {
-  ruleElement.classList.add("dirty");
-  const publishButton = $(".publish", ruleElement);
-  if (publishButton) publishButton.disabled = false;
-};
-const collectRuleFromElement = (ruleElement, baseRule) => {
-  const rule = JSON.parse(JSON.stringify(baseRule));
-  delete rule._isNew;
-  ruleElement.querySelectorAll("[data-path]").forEach((field) => {
-    writePath(rule, field.dataset.path, field.type === "number" ? Number(field.value) : field.value);
-  });
-  rule.enabled = $(".rule-enabled", ruleElement).checked;
-  rule.response.enabled = $(".response-enabled", ruleElement).checked;
-  return rule;
-};
-$("#enabled").addEventListener("change", (event) => { state.enabled = event.target.checked; persist(); updateToggleStatus(); });
-$("#add").addEventListener("click", () => {
-  const rule = { ...makeRule(), _isNew: true };
-  state.rules.push(rule);
-  render();
-  const ruleElement = $(`.rule[data-id="${rule.id}"]`, rulesElement);
-  if (ruleElement) {
-    markDirty(ruleElement);
-    ruleElement.classList.add("open");
-    $(".rule-name-input", ruleElement)?.focus();
-  }
-});
-
-function updateToggleStatus() {
-  const statusLabel = $("#toggle-status");
-  if (statusLabel) {
-    statusLabel.textContent = state.enabled ? "Active" : "Inactive";
-  }
-}
-rulesElement.addEventListener("input", (event) => {
-  const ruleElement = event.target.closest(".rule");
-  if (ruleElement && event.target.dataset.path) markDirty(ruleElement);
-});
-rulesElement.addEventListener("change", (event) => {
-  const ruleElement = event.target.closest(".rule");
-  if (!ruleElement) return;
-  if (event.target.dataset.path === "match.method") {
-    const methodBadge = $(".accordion-title .method-badge", ruleElement);
-    methodBadge.textContent = event.target.value;
-    methodBadge.className = `method-badge ${getMethodBadgeClass(event.target.value)}`;
-  }
-  markDirty(ruleElement);
-});
+$("#enabled").addEventListener("change", (event) => { state.enabled = event.target.checked; persist(); $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive"; });
+$("#add").addEventListener("click", addRule);
 rulesElement.addEventListener("click", (event) => {
-  const ruleElement = event.target.closest(".rule");
-  if (!ruleElement) return;
-  if (event.target.classList.contains("delete")) {
-    state.rules = state.rules.filter((item) => item.id !== ruleElement.dataset.id);
-    ruleElement.remove();
-    persist();
+  const mockSelect = event.target.closest(".mock-select");
+  if (mockSelect) {
+    const mockItem = mockSelect.closest(".mock-item");
+    if (event.target.closest(".mock-trash")) {
+      state.rules = state.rules.filter((rule) => rule.id !== mockItem.dataset.id);
+      selectedRuleId = state.rules[0]?.id || null;
+      persist();
+      render();
+      return;
+    }
+    if (event.target.closest(".rule-enabled")) return;
+    selectedRuleId = mockItem.dataset.id;
+    render();
     return;
   }
-  if (event.target.classList.contains("publish")) {
-    const index = state.rules.findIndex((item) => item.id === ruleElement.dataset.id);
-    if (index === -1) return;
-    state.rules[index] = collectRuleFromElement(ruleElement, state.rules[index]);
-    persist();
-    ruleElement.classList.remove("dirty");
-    const publishButton = event.target;
-    publishButton.disabled = true;
-    publishButton.textContent = "Published ✓";
-    setTimeout(() => { publishButton.textContent = "Publish Rule"; }, 1500);
+  if (event.target.closest("#rail-add, #empty-add")) { addRule(); return; }
+  const editor = event.target.closest(".editor");
+  if (!editor) return;
+  const tab = event.target.closest(".editor-tab");
+  if (tab) { activeView = tab.dataset.view; render(); return; }
+  const format = event.target.closest(".format-json");
+  if (format) { const body = $("[data-path=\"response.body\"]", editor); try { body.value = JSON.stringify(JSON.parse(body.value), null, 2); format.textContent = "Formatted"; markDirty(editor); setTimeout(() => { format.textContent = "Format JSON"; }, 1000); } catch { format.textContent = "Invalid JSON"; setTimeout(() => { format.textContent = "Format JSON"; }, 1200); } return; }
+  if (event.target.closest(".delete")) { state.rules = state.rules.filter((rule) => rule.id !== editor.dataset.id); selectedRuleId = state.rules[0]?.id || null; persist(); render(); return; }
+  if (event.target.closest(".publish")) {
+    const index = state.rules.findIndex((rule) => rule.id === editor.dataset.id);
+    if (index < 0) return;
+    state.rules[index] = collectRule(editor, state.rules[index]);
+    persist(() => {
+      if (chrome.runtime.lastError) return;
+      render();
+    });
+    return;
   }
 });
-chrome.storage.local.get(state, (saved) => { state = saved; $("#enabled").checked = state.enabled; updateToggleStatus(); render(); });
+rulesElement.addEventListener("input", (event) => { const editor = event.target.closest(".editor"); if (editor && event.target.dataset.path) markDirty(editor); });
+rulesElement.addEventListener("change", (event) => {
+  const editor = event.target.closest(".editor");
+  if (editor && (event.target.dataset.path || event.target.classList.contains("response-enabled"))) markDirty(editor);
+  if (event.target.classList.contains("rule-enabled")) {
+    const rule = state.rules.find((item) => item.id === event.target.closest(".mock-item").dataset.id);
+    if (rule) { rule.enabled = event.target.checked; persist(); }
+  }
+});
+chrome.storage.local.get(state, (saved) => { state = saved; $("#enabled").checked = state.enabled; $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive"; render(); });

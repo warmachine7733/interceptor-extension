@@ -2,15 +2,18 @@
   const normalizeMethod = (method) => (method || "*").toUpperCase();
 
   const patternToRegex = (pattern) => {
-    const escaped = String(pattern || "*")
+    const value = String(pattern || "*");
+    const hasQuery = value.includes("?");
+    const escaped = value
       .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\*/g, ".*");
+      .replace(/\*/g, hasQuery ? ".*" : "[^?]*");
     return new RegExp(`^${escaped}$`);
   };
 
   const matches = (rule, url, method) => {
     if (!rule?.enabled) return false;
-    if (!patternToRegex(rule.match?.urlPattern).test(url)) return false;
+    const pattern = String(rule.match?.urlPattern || "*");
+    if (!patternToRegex(pattern).test(String(url))) return false;
     const expectedMethod = normalizeMethod(rule.match?.method);
     return expectedMethod === "*" || expectedMethod === normalizeMethod(method);
   };

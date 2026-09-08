@@ -18,6 +18,12 @@
           </h1>
           <p class="header-subtitle">Local request interception & response mocking</p>
         </div>
+        <nav class="top-nav" aria-label="Primary navigation">
+          <span class="top-nav-active">Build</span>
+          <span>Mocks</span>
+          <span>History</span>
+          <span>Settings</span>
+        </nav>
         <div class="header-right">
           <div class="toggle-container">
             <label class="switch">
@@ -36,13 +42,16 @@
     <main class="app-main">
       <div class="rules-container">
         <div class="rules-header">
-          <h2 class="rules-title">API Rules</h2>
+          <div class="workspace-tabs" role="tablist" aria-label="Workspace views">
+            <span class="workspace-tab active" role="tab" aria-selected="true">Collections</span>
+            <span class="workspace-tab" role="tab" aria-selected="false">Environments</span>
+          </div>
           <button id="add" class="btn btn-primary btn-add" type="button">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
-            Add Rule
+            New request
           </button>
         </div>
         <section id="rules" class="rules-list"></section>
