@@ -62,8 +62,8 @@ input:checked + .slider:before { transform: translateX(16px); }
 .rule-enabled { width: 14px; height: 14px; margin: 0; accent-color: var(--orange); }
 .mock-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
 .mock-more, .mock-trash { color: #8a9198; font-size: 17px; line-height: 1; text-align: center; }
-.mock-trash { display: inline-flex; width: 22px; height: 24px; align-items: center; justify-content: center; border-radius: 3px; }
-.mock-trash svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.mock-trash { display: inline-flex; width: 22px; height: 24px; align-items: center; justify-content: center; border-radius: 4px; color: #8a9198; }
+.mock-trash svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .mock-trash:hover { color: #b33a3a; background: #fff0f0; }
 .mock-meta { display: flex; gap: 8px; margin: 5px 0 0 22px; overflow: hidden; color: #899098; font-size: 11px; white-space: nowrap; }
 .mock-meta > span:last-child { overflow: hidden; text-overflow: ellipsis; }
@@ -87,12 +87,18 @@ input:checked + .slider:before { transform: translateX(16px); }
 .editor-tab.active { border-bottom-color: var(--orange); color: var(--ink); }
 .editor-panel { display: none; min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; padding: 16px 18px 24px; }
 .editor-panel.active { display: flex; }
-.response-meta { display: grid; grid-template-columns: 160px 88px 88px minmax(160px, 1fr); gap: 10px; align-items: end; }
-.response-meta label, .editor-panel label { display: flex; flex-direction: column; gap: 5px; color: #596169; font-size: 11px; font-weight: 700; }
-.response-meta label:first-child { flex-direction: row; align-items: center; align-self: center; gap: 7px; }
-.response-meta input[type="checkbox"] { accent-color: var(--orange); }
-.response-meta input, .editor-panel input, .editor-panel textarea { min-width: 0; padding: 8px 9px; border: 1px solid #d6dade; border-radius: 4px; color: var(--ink); background: var(--soft); }
-.response-meta textarea { height: 38px; min-height: 38px; max-height: 54px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.response-meta { display: grid; grid-template-columns: minmax(210px, auto) 116px 126px minmax(300px, 1fr); gap: 12px; align-items: center; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fbfcfd; }
+.response-meta label, .editor-panel label { display: flex; flex-direction: row; align-items: center; gap: 7px; color: #596169; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.response-meta label:first-child { justify-content: flex-start; align-self: stretch; padding: 0 10px; border: 1px solid #e3e6e9; border-radius: 4px; color: #3f474e; background: #fff; }
+.response-meta input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--orange); }
+.response-meta label:not(:first-child) input { flex: 1; width: 0; }
+.response-meta label:nth-child(3) { position: relative; }
+.response-meta label:nth-child(3)::after { content: none; }
+.response-meta label:nth-child(3) input { padding-right: 9px; }
+.response-meta .headers-compact { min-width: 0; }
+.response-meta .headers-compact textarea { flex: 1; width: 0; }
+.response-meta input, .editor-panel input, .editor-panel textarea { min-width: 0; padding: 7px 9px; border: 1px solid #d6dade; border-radius: 4px; color: var(--ink); background: #fff; }
+.response-meta textarea { height: 42px; min-height: 42px; max-height: 46px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 .body-heading { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; margin-bottom: 6px; color: #4c555d; font-size: 12px; font-weight: 700; }
 .format-json { padding: 5px 8px; border: 1px solid #d6dade; border-radius: 3px; color: #616a72; background: #f7f8f9; font-size: 10px; font-weight: 700; }
 .format-json:hover { border-color: var(--orange); color: var(--orange-dark); background: #fff8f1; }

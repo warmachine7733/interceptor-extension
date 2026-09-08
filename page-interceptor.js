@@ -30,10 +30,14 @@
   const matchingRule = (url, method) => config.enabled ? firstMatch(config.rules, url, method) : null;
   const log = (method, url, rule) => {
     if (rule) {
+      const logRule = { ...rule, response: rule.response ? { ...rule.response } : rule.response };
+      try {
+        if (typeof logRule.response?.body === "string") logRule.response.body = JSON.parse(logRule.response.body);
+      } catch { /* Keep non-JSON response bodies as strings. */ }
       console.log(
         `%c[API Mock]%c ${rule.response?.enabled ? "mocked" : "rewriting"} %c${method}%c ${url}`,
         "color:#22c55e;font-weight:bold", "color:inherit", "background:#334155;color:#fff;padding:0 4px;border-radius:3px", "color:inherit",
-        rule
+        logRule
       );
     } else if (config.enabled) {
       console.log(`%c[API Mock]%c passthrough %c${method}%c ${url}`, "color:#94a3b8;font-weight:bold", "color:inherit", "background:#e2e8f0;color:#334155;padding:0 4px;border-radius:3px", "color:inherit");
