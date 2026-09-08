@@ -6,10 +6,20 @@ let activeView = "response";
 
 $("#version-name").textContent = `v${chrome.runtime.getManifest().version}`;
 
+const nameFromUrl = (urlPattern) => {
+  try {
+    const url = new URL(String(urlPattern).replaceAll("*", "preview"));
+    const path = url.pathname.split("/").filter(Boolean).join(" / ");
+    return path ? `${url.host} / ${path}` : url.host;
+  } catch {
+    return "New API mock";
+  }
+};
+
 const makeRule = () => ({
   id: crypto.randomUUID(),
   enabled: true,
-  name: "JSONPlaceholder post",
+  name: nameFromUrl("https://jsonplaceholder.typicode.com/posts/1?test=*"),
   match: { urlPattern: "https://jsonplaceholder.typicode.com/posts/1?test=*", method: "GET" },
   request: { url: "", method: "", headers: "{}", body: "" },
   response: { enabled: true, status: 200, statusText: "OK", headers: '{"content-type":"application/json"}', body: '{"id":1,"title":"Mocked post","body":"This response is mocked locally.","userId":1}', delayMs: 0 }
@@ -103,7 +113,18 @@ rulesElement.addEventListener("click", (event) => {
     return;
   }
 });
-rulesElement.addEventListener("input", (event) => { const editor = event.target.closest(".editor"); if (editor && event.target.dataset.path) markDirty(editor); });
+rulesElement.addEventListener("input", (event) => {
+  const editor = event.target.closest(".editor");
+  if (!editor || !event.target.dataset.path) return;
+  markDirty(editor);
+  if (event.target.dataset.path === "match.urlPattern") {
+    const rule = state.rules.find((item) => item.id === editor.dataset.id);
+    const mockItem = Array.from(document.querySelectorAll(".mock-item")).find((item) => item.dataset.id === editor.dataset.id);
+    const mockName = mockItem && $(".mock-name", mockItem);
+    if (rule) rule.name = nameFromUrl(event.target.value);
+    if (mockName) mockName.textContent = rule?.name || nameFromUrl(event.target.value);
+  }
+});
 rulesElement.addEventListener("change", (event) => {
   const editor = event.target.closest(".editor");
   if (editor && (event.target.dataset.path || event.target.classList.contains("response-enabled"))) markDirty(editor);

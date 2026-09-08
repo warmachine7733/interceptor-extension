@@ -109,7 +109,7 @@ input:checked + .slider:before { transform: translateX(16px); }
 .response-meta .response-headers-control { min-width: 0; }
 .response-meta .response-headers-control textarea { flex: 1; width: 0; }
 .response-meta input, .editor-panel input, .editor-panel textarea { min-width: 0; padding: 7px 9px; border: 1px solid #d6dade; border-radius: 4px; color: var(--ink); background: #fff; }
-.response-meta textarea { height: 42px; min-height: 42px; max-height: 46px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.response-meta textarea { height: 32px; min-height: 32px; max-height: 38px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 .body-heading { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; margin-bottom: 6px; color: #4c555d; font-size: 12px; font-weight: 700; }
 .format-json { padding: 5px 8px; border: 1px solid #d6dade; border-radius: 3px; color: #616a72; background: #f7f8f9; font-size: 10px; font-weight: 700; }
 .format-json:hover { border-color: var(--orange); color: var(--orange-dark); background: #fff8f1; }
