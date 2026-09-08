@@ -39,6 +39,7 @@ function buildPageContext(config, nativeFetchResult = "NATIVE") {
   const sandbox = {
     console, setTimeout, URL, RegExp, JSON, Object, Number, String, Promise, Error, WeakMap, Set, Map, Array,
     Request: FakeRequest, Response: FakeResponse, Headers: FakeHeaders,
+    Event: class { constructor(type) { this.type = type; } },
     location: { href: "https://app.example.com/" },
   };
   sandbox.window = sandbox;
@@ -52,7 +53,7 @@ function buildPageContext(config, nativeFetchResult = "NATIVE") {
   sandbox.postMessage = (msg) => {
     // simulate bridge replying with config on get-config
     if (msg?.type === "get-config") {
-      queueMicrotask(() => (listeners.message || []).forEach((fn) => fn({ source: sandbox, data: { source: "local-api-mock", type: "config", config } })));
+      queueMicrotask(() => (listeners.message || []).forEach((fn) => fn({ source: sandbox.__vmWindow, data: { source: "local-api-mock", type: "config", config } })));
     }
   };
   // minimal XHR stub
@@ -69,6 +70,9 @@ function buildPageContext(config, nativeFetchResult = "NATIVE") {
 
   const src = fs.readFileSync(new URL("../page-interceptor.js", import.meta.url), "utf8");
   vm.runInContext(src, sandbox);
+  // Inside the vm, `window` resolves to the contextified global, which is not
+  // reference-equal to `sandbox`; the interceptor checks `event.source === window`.
+  sandbox.__vmWindow = vm.runInContext("window", sandbox);
   return { sandbox, calls };
 }
 

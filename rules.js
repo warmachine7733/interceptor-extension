@@ -3,7 +3,7 @@
 
   const patternToRegex = (pattern) => {
     const escaped = String(pattern || "*")
-      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
       .replace(/\*/g, ".*");
     return new RegExp(`^${escaped}$`);
   };

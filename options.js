@@ -20,7 +20,7 @@ const getMethodBadgeClass = (method) => {
   return methodMap[method] || "method-star";
 };
 
-const ruleTemplate = (rule) => `<article class="rule accordion-item" data-id="${rule.id}"><button class="accordion-header" type="button"><div class="accordion-title"><input class="rule-enabled" type="checkbox" ${rule.enabled ? "checked" : ""}><input class="rule-name-input" data-path="name" type="text" placeholder="Rule name" value="${esc(rule.name)}"><span class="method-badge ${getMethodBadgeClass(rule.match.method)}">${esc(rule.match.method)}</span></div><div class="accordion-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></div></button><div class="accordion-body"><div class="accordion-content"><div class="fields"><label>URL Pattern (* wildcard)<input data-path="match.urlPattern" value="${esc(rule.match.urlPattern)}"></label><label>HTTP Method<select data-path="match.method">${["*","GET","POST","PUT","PATCH","DELETE","HEAD"].map((m) => `<option ${rule.match.method === m ? "selected" : ""}>${m}</option>`).join("")}</select></label></div><div class="request"><span class="section-title">Request Override</span><div class="fields"><label>Replacement URL (optional)<input data-path="request.url" placeholder="Leave empty to keep original" value="${esc(rule.request.url)}"></label><label>Replacement Method (optional)<input data-path="request.method" placeholder="GET, POST, etc." value="${esc(rule.request.method)}"></label></div><label>Headers JSON<textarea data-path="request.headers">${esc(rule.request.headers)}</textarea></label><label>Body (optional)<textarea data-path="request.body" placeholder="{}" style="min-height: 80px;">${esc(rule.request.body)}</textarea></label></div><div class="response"><label style="flex-direction: row; gap: 8px;"><input class="response-enabled" type="checkbox" ${rule.response.enabled ? "checked" : ""}><span>Return mock response</span></label><div class="fields"><label>Status Code<input data-path="response.status" type="number" value="${esc(rule.response.status)}"></label><label>Delay (ms)<input data-path="response.delayMs" type="number" value="${esc(rule.response.delayMs)}"></label></div><label>Response Headers JSON<textarea data-path="response.headers">${esc(rule.response.headers)}</textarea></label><label>Response Body<textarea data-path="response.body" placeholder="{}" style="min-height: 120px;">${esc(rule.response.body)}</textarea></label></div></div><button class="delete" type="button">Delete</button></div></article>`;
+const ruleTemplate = (rule) => `<article class="rule accordion-item" data-id="${rule.id}"><button class="accordion-header" type="button"><div class="accordion-title"><input class="rule-enabled" type="checkbox" ${rule.enabled ? "checked" : ""}><input class="rule-name-input" data-path="name" type="text" placeholder="Rule name" value="${esc(rule.name)}"><span class="method-badge ${getMethodBadgeClass(rule.match.method)}">${esc(rule.match.method)}</span></div><div class="accordion-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></div></button><div class="accordion-body"><div class="accordion-content"><div class="fields"><label>URL Pattern (* wildcard, include ?query to match query params)<input data-path="match.urlPattern" value="${esc(rule.match.urlPattern)}"></label><label>HTTP Method<select data-path="match.method">${["*","GET","POST","PUT","PATCH","DELETE","HEAD"].map((m) => `<option ${rule.match.method === m ? "selected" : ""}>${m}</option>`).join("")}</select></label></div><div class="request"><span class="section-title">Request Override</span><div class="fields"><label>Replacement URL (optional)<input data-path="request.url" placeholder="Leave empty to keep original" value="${esc(rule.request.url)}"></label><label>Replacement Method (optional)<input data-path="request.method" placeholder="GET, POST, etc." value="${esc(rule.request.method)}"></label></div><label>Headers JSON<textarea data-path="request.headers">${esc(rule.request.headers)}</textarea></label><label>Body (optional)<textarea data-path="request.body" placeholder="{}" style="min-height: 80px;">${esc(rule.request.body)}</textarea></label></div><div class="response"><label style="flex-direction: row; gap: 8px;"><input class="response-enabled" type="checkbox" ${rule.response.enabled ? "checked" : ""}><span>Return mock response</span></label><div class="fields"><label>Status Code<input data-path="response.status" type="number" value="${esc(rule.response.status)}"></label><label>Delay (ms)<input data-path="response.delayMs" type="number" value="${esc(rule.response.delayMs)}"></label></div><label>Response Headers JSON<textarea data-path="response.headers">${esc(rule.response.headers)}</textarea></label><label>Response Body<textarea data-path="response.body" placeholder="{}" style="min-height: 120px;">${esc(rule.response.body)}</textarea></label></div></div><div class="rule-footer"><span class="dirty-badge">Unsaved changes</span><button class="publish" type="button" disabled>Publish Rule</button><button class="delete" type="button">Delete</button></div></div></article>`;
 
 function readPath(object, path) { return path.split(".").reduce((value, key) => value[key], object); }
 function writePath(object, path, value) { const parts = path.split("."); const last = parts.pop(); parts.reduce((target, key) => target[key], object)[last] = value; }
@@ -66,9 +66,34 @@ function setupAccordion() {
   });
 }
 
-function persist() { chrome.storage.local.set(state); }
+function persist() { chrome.storage.local.set({ enabled: state.enabled, rules: state.rules.filter((rule) => !rule._isNew) }); }
+const markDirty = (ruleElement) => {
+  ruleElement.classList.add("dirty");
+  const publishButton = $(".publish", ruleElement);
+  if (publishButton) publishButton.disabled = false;
+};
+const collectRuleFromElement = (ruleElement, baseRule) => {
+  const rule = JSON.parse(JSON.stringify(baseRule));
+  delete rule._isNew;
+  ruleElement.querySelectorAll("[data-path]").forEach((field) => {
+    writePath(rule, field.dataset.path, field.type === "number" ? Number(field.value) : field.value);
+  });
+  rule.enabled = $(".rule-enabled", ruleElement).checked;
+  rule.response.enabled = $(".response-enabled", ruleElement).checked;
+  return rule;
+};
 $("#enabled").addEventListener("change", (event) => { state.enabled = event.target.checked; persist(); updateToggleStatus(); });
-$("#add").addEventListener("click", () => { state.rules.push(makeRule()); render(); persist(); });
+$("#add").addEventListener("click", () => {
+  const rule = { ...makeRule(), _isNew: true };
+  state.rules.push(rule);
+  render();
+  const ruleElement = $(`.rule[data-id="${rule.id}"]`, rulesElement);
+  if (ruleElement) {
+    markDirty(ruleElement);
+    ruleElement.classList.add("open");
+    $(".rule-name-input", ruleElement)?.focus();
+  }
+});
 
 function updateToggleStatus() {
   const statusLabel = $("#toggle-status");
@@ -76,7 +101,39 @@ function updateToggleStatus() {
     statusLabel.textContent = state.enabled ? "Active" : "Inactive";
   }
 }
-rulesElement.addEventListener("input", (event) => { const rule = state.rules.find((item) => item.id === event.target.closest(".rule")?.dataset.id); if (rule && event.target.dataset.path) { writePath(rule, event.target.dataset.path, event.target.type === "number" ? Number(event.target.value) : event.target.value); persist(); } });
-rulesElement.addEventListener("change", (event) => { const ruleElement = event.target.closest(".rule"); const rule = state.rules.find((item) => item.id === ruleElement?.dataset.id); if (!rule) return; if (event.target.classList.contains("rule-enabled")) rule.enabled = event.target.checked; if (event.target.classList.contains("response-enabled")) rule.response.enabled = event.target.checked; if (event.target.dataset.path === "match.method") { const methodBadge = $(".accordion-title .method-badge", ruleElement); methodBadge.textContent = event.target.value; methodBadge.className = `method-badge ${getMethodBadgeClass(event.target.value)}`; } persist(); });
-rulesElement.addEventListener("click", (event) => { if (!event.target.classList.contains("delete")) return; state.rules = state.rules.filter((item) => item.id !== event.target.closest(".rule").dataset.id); render(); persist(); });
+rulesElement.addEventListener("input", (event) => {
+  const ruleElement = event.target.closest(".rule");
+  if (ruleElement && event.target.dataset.path) markDirty(ruleElement);
+});
+rulesElement.addEventListener("change", (event) => {
+  const ruleElement = event.target.closest(".rule");
+  if (!ruleElement) return;
+  if (event.target.dataset.path === "match.method") {
+    const methodBadge = $(".accordion-title .method-badge", ruleElement);
+    methodBadge.textContent = event.target.value;
+    methodBadge.className = `method-badge ${getMethodBadgeClass(event.target.value)}`;
+  }
+  markDirty(ruleElement);
+});
+rulesElement.addEventListener("click", (event) => {
+  const ruleElement = event.target.closest(".rule");
+  if (!ruleElement) return;
+  if (event.target.classList.contains("delete")) {
+    state.rules = state.rules.filter((item) => item.id !== ruleElement.dataset.id);
+    ruleElement.remove();
+    persist();
+    return;
+  }
+  if (event.target.classList.contains("publish")) {
+    const index = state.rules.findIndex((item) => item.id === ruleElement.dataset.id);
+    if (index === -1) return;
+    state.rules[index] = collectRuleFromElement(ruleElement, state.rules[index]);
+    persist();
+    ruleElement.classList.remove("dirty");
+    const publishButton = event.target;
+    publishButton.disabled = true;
+    publishButton.textContent = "Published ✓";
+    setTimeout(() => { publishButton.textContent = "Publish Rule"; }, 1500);
+  }
+});
 chrome.storage.local.get(state, (saved) => { state = saved; $("#enabled").checked = state.enabled; updateToggleStatus(); render(); });

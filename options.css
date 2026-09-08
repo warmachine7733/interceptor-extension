@@ -348,6 +348,50 @@ input:checked + .slider:before {
   background: #ffcdd2;
 }
 
+/* Rule footer: publish + dirty state */
+.rule-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 24px 20px;
+}
+
+.dirty-badge {
+  display: none;
+  margin-right: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e65100;
+}
+
+.rule.dirty .dirty-badge {
+  display: inline;
+}
+
+.publish {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.publish:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.rule.dirty .publish {
+  background: #2e7d32;
+  color: #fff;
+  border-color: #2e7d32;
+}
+
+.rule.dirty .publish:hover:not(:disabled) {
+  background: #1b5e20;
+}
+
 /* HTTP Method Badge */
 .method-badge {
   display: inline-block;

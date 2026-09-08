@@ -6,7 +6,7 @@
   const rules = window.ApiMockRules || (() => {
     const normalizeMethod = (method) => (method || "*").toUpperCase();
     const patternToRegex = (pattern) => new RegExp(`^${String(pattern || "*")
-      .replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
+      .replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
     const firstMatch = (rules, url, method) => (rules || []).find((rule) => {
       if (!rule?.enabled || !patternToRegex(rule.match?.urlPattern).test(url)) return false;
       const expectedMethod = normalizeMethod(rule.match?.method);
@@ -28,6 +28,49 @@
   window.postMessage({ source: "local-api-mock", type: "get-config" }, "*");
 
   const matchingRule = (url, method) => config.enabled ? firstMatch(config.rules, url, method) : null;
+  const log = (method, url, rule) => {
+    if (rule) {
+      console.log(
+        `%c[API Mock]%c ${rule.response?.enabled ? "mocked" : "rewriting"} %c${method}%c ${url}`,
+        "color:#22c55e;font-weight:bold", "color:inherit", "background:#334155;color:#fff;padding:0 4px;border-radius:3px", "color:inherit",
+        rule
+      );
+    } else if (config.enabled) {
+      console.log(`%c[API Mock]%c passthrough %c${method}%c ${url}`, "color:#94a3b8;font-weight:bold", "color:inherit", "background:#e2e8f0;color:#334155;padding:0 4px;border-radius:3px", "color:inherit");
+    }
+  };
+  const toastState = { container: null, lastShown: new Map() };
+  const showRuleToast = (rule, url, method) => {
+    try {
+      if (typeof document === "undefined" || !document.documentElement) return;
+      const key = `${rule?.id || ""}|${method}|${url}`;
+      const now = Date.now();
+      if (now - (toastState.lastShown.get(key) || 0) < 3000) return;
+      toastState.lastShown.set(key, now);
+      if (!toastState.container?.isConnected) {
+        toastState.container = document.createElement("div");
+        toastState.container.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;pointer-events:none;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;";
+        (document.body || document.documentElement).appendChild(toastState.container);
+      }
+      const toast = document.createElement("div");
+      toast.style.cssText = "pointer-events:auto;cursor:pointer;background:#1e293b;color:#f8fafc;padding:10px 14px 6px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.35);font-size:13px;line-height:1.4;max-width:360px;border-left:3px solid #22c55e;opacity:0;transform:translateY(8px);transition:opacity .2s ease,transform .2s ease;overflow:hidden;";
+      const title = document.createElement("div");
+      title.style.cssText = "font-weight:600;";
+      title.textContent = `⚡ ${rule?.response?.enabled ? "Mocked" : "Intercepted"}: ${rule?.name || "Unnamed rule"}`;
+      const detail = document.createElement("div");
+      detail.style.cssText = "opacity:.7;font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      detail.textContent = `${method} ${url}`;
+      const DURATION = 4000;
+      const bar = document.createElement("div");
+      bar.style.cssText = `height:3px;border-radius:2px;background:#22c55e;margin-top:8px;width:100%;transition:width ${DURATION}ms linear;`;
+      toast.append(title, detail, bar);
+      const dismiss = () => { toast.style.opacity = "0"; toast.style.transform = "translateY(8px)"; setTimeout(() => toast.remove(), 250); };
+      toast.addEventListener("click", dismiss);
+      toastState.container.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = "1"; toast.style.transform = "translateY(0)"; bar.style.width = "0%"; }, 30);
+      setTimeout(dismiss, DURATION);
+    } catch { /* best-effort UI notification */ }
+  };
   const applyRequestOverride = async (request, override = {}) => {
     const headers = new Headers(request.headers);
     for (const [key, value] of Object.entries(parseHeaders(override.headers))) {
@@ -50,7 +93,9 @@
   window.fetch = async (input, init) => {
     const original = input instanceof Request ? input : new Request(input, init);
     const rule = matchingRule(original.url, original.method);
+    log(original.method, original.url, rule);
     if (!rule) return nativeFetch(input, init);
+    showRuleToast(rule, original.url, original.method);
     const request = await applyRequestOverride(original, rule.request);
     if (rule.response?.enabled) return mockResponse(rule.response);
     return nativeFetch(request);
@@ -81,7 +126,9 @@
   };
   XMLHttpRequest.prototype.send = function (body) {
     const details = meta.get(this);
+    if (details) log(details.method, details.url, details.rule || null);
     if (!details?.rule) return nativeSend.call(this, body);
+    showRuleToast(details.rule, details.url, details.method);
     for (const [name, value] of Object.entries(parseHeaders(details.override.headers))) {
       if (value !== null && value !== "" && !details.overriddenHeaders?.has(name.toLowerCase())) nativeSetRequestHeader.call(this, name, String(value));
     }
