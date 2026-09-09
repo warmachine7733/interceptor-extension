@@ -131,7 +131,8 @@ node --test test/  # Run all tests
 
 See [TESTING.md](TESTING.md) for detailed test scenarios and [FIXES.md](FIXES.md) for bug fixes applied.
 The build runs `sync-version.mjs` before packaging, keeping `package.json` and
-`manifest.json` on the same version. The current release is **1.1.0**.
+`manifest.json` on the same version. The current release is **1.1.5**. See
+[CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Rules
 

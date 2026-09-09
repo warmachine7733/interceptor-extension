@@ -23,6 +23,16 @@ npm test             # Run tests
 npm run build        # Build extension for distribution
 ```
 
+## Release checklist
+
+- Update [CHANGELOG.md](CHANGELOG.md) with the new version and a short summary of changes
+- Bump `package.json` and run `npm run prebuild` to sync `manifest.json`
+- Run `npm test` and `npm run build`
+
+Use `npm run bump -- 1.1.6` for the next release. It updates `package.json`,
+syncs `manifest.json`, and adds recent commit summaries to `CHANGELOG.md`.
+You can provide an optional summary after the version when needed.
+
 ## Code structure
 
 - `manifest.json` — Extension configuration (Manifest V3)
