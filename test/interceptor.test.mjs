@@ -112,6 +112,15 @@ test("fetch falls through when extension disabled", async () => {
   assert.equal(calls.nativeFetch.length, 1);
 });
 
+test("unchecked response passes through using request overrides", async () => {
+  const rule = { ...RULE, request: { url: "https://api.example.com/rewritten", method: "POST", headers: "{}", body: '{"changed":true}' }, response: { ...RULE.response, enabled: false } };
+  const { sandbox, calls } = buildPageContext({ enabled: true, rules: [rule] });
+  await new Promise((r) => setTimeout(r, 0));
+  const result = await sandbox.fetch("https://api.example.com/users/1");
+  assert.equal(result, "NATIVE");
+  assert.deepEqual(calls.nativeFetch, ["https://api.example.com/rewritten"]);
+});
+
 test("XMLHttpRequest is intercepted and mocked", async () => {
   const { sandbox, calls } = buildPageContext({ enabled: true, rules: [RULE] });
   await new Promise((r) => setTimeout(r, 0));

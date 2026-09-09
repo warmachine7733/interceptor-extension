@@ -34,6 +34,11 @@ test("matches comma-separated query values", () => {
 	assert.equal(firstMatch([commaRule], "https://jsonplaceholder.typicode.com/posts/1?test=1234,123", "GET"), commaRule);
 	assert.equal(firstMatch([commaRule], "https://jsonplaceholder.typicode.com/posts/1?test=1234%2C123", "GET"), commaRule);
 });
+test("matches DELETE requests", () => {
+	const deleteRule = { enabled: true, match: { urlPattern: "https://jsonplaceholder.typicode.com/posts/1", method: "DELETE" } };
+	assert.equal(firstMatch([deleteRule], "https://jsonplaceholder.typicode.com/posts/1", "DELETE"), deleteRule);
+	assert.equal(firstMatch([deleteRule], "https://jsonplaceholder.typicode.com/posts/1", "GET"), null);
+});
 test("skips disabled rules and honors priority", () => { const disabled = { ...rule, enabled: false }; assert.equal(firstMatch([disabled, rule], "https://api.example.com/users/42", "GET"), rule); });
 test("parses valid headers and safely handles malformed headers", () => {
 	assert.deepEqual({ ...parseHeaders('{"x-test":"yes"}') }, { "x-test": "yes" });

@@ -81,7 +81,7 @@ function render() {
 }
 
 function markDirty(editor) { editor.classList.add("dirty"); const button = $(".publish", editor); if (button) button.disabled = false; }
-function collectRule(editor, baseRule) { const rule = JSON.parse(JSON.stringify(baseRule)); editor.querySelectorAll("[data-path]").forEach((field) => writePath(rule, field.dataset.path, field.type === "number" ? Number(field.value) : field.value)); rule.enabled = $(".rule-enabled", editor)?.checked ?? rule.enabled; rule.responses[activeResponseIndex] = rule.response; rule.defaultResponseIndex = activeResponseIndex; delete rule._isNew; return rule; }
+function collectRule(editor, baseRule) { const rule = JSON.parse(JSON.stringify(baseRule)); editor.querySelectorAll("[data-path]").forEach((field) => writePath(rule, field.dataset.path, field.type === "number" ? Number(field.value) : field.value)); rule.enabled = $(".rule-enabled", editor)?.checked ?? rule.enabled; rule.response.enabled = $(".response-enabled", editor)?.checked ?? rule.response.enabled; rule.responses[activeResponseIndex] = rule.response; rule.defaultResponseIndex = activeResponseIndex; delete rule._isNew; return rule; }
 function addRule() { const rule = { ...makeRule(), _isNew: true }; rule.response = rule.responses[0]; state.rules.push(rule); selectedRuleId = rule.id; activeResponseIndex = 0; activeView = "response"; render(); const editor = $(".editor"); markDirty(editor); $(".editor-url", editor)?.focus(); }
 
 $("#enabled").addEventListener("change", (event) => { state.enabled = event.target.checked; persist(); $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive"; });
