@@ -16,8 +16,9 @@
     if (!rule) return;
     handledLinks.add(link);
     const targetUrl = rule.request?.url || link.href;
-    if (rule.response?.enabled) {
-      const css = rule.response.body ?? "";
+    const response = rule.responses?.[0] || rule.response;
+    if (response?.enabled) {
+      const css = response.body ?? "";
       const style = document.createElement("style");
       style.setAttribute("data-local-api-mock", "true");
       style.textContent = css;

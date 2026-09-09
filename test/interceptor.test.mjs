@@ -85,6 +85,18 @@ test("fetch is intercepted and mocked", async () => {
   assert.equal(body, '{"mocked":true}');
 });
 
+test("fetch uses the published response variant by default", async () => {
+  const rule = { ...RULE, response: undefined, responses: [
+    { ...RULE.response, status: 201, body: '{"variant":1}' },
+    { ...RULE.response, status: 500, body: '{"variant":2}' }
+  ], defaultResponseIndex: 1 };
+  const { sandbox } = buildPageContext({ enabled: true, rules: [rule] });
+  await new Promise((r) => setTimeout(r, 0));
+  const res = await sandbox.fetch("https://api.example.com/users/1");
+  assert.equal(res.status, 500);
+  assert.equal(await res.text(), '{"variant":2}');
+});
+
 test("fetch falls through when no rule matches", async () => {
   const { sandbox, calls } = buildPageContext({ enabled: true, rules: [RULE] });
   await new Promise((r) => setTimeout(r, 0));

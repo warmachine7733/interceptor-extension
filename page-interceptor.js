@@ -29,14 +29,16 @@
   window.postMessage({ source: "local-api-mock", type: "get-config" }, "*");
 
   const matchingRule = (url, method) => config.enabled ? firstMatch(config.rules, url, method) : null;
+  const responseForRule = (rule) => rule?.responses?.[Math.min(Math.max(Number(rule.defaultResponseIndex) || 0, 0), rule.responses.length - 1)] || rule?.response;
   const log = (method, url, rule) => {
     if (rule) {
-      const logRule = { ...rule, response: rule.response ? { ...rule.response } : rule.response };
+      const response = responseForRule(rule);
+      const logRule = { ...rule, response: response ? { ...response } : response };
       try {
         if (typeof logRule.response?.body === "string") logRule.response.body = JSON.parse(logRule.response.body);
       } catch { /* Keep non-JSON response bodies as strings. */ }
       console.log(
-        `%c[API Mock]%c ${rule.response?.enabled ? "mocked" : "rewriting"} %c${method}%c ${url}`,
+        `%c[API Mock]%c ${response?.enabled ? "mocked" : "rewriting"} %c${method}%c ${url}`,
         "color:#22c55e;font-weight:bold", "color:inherit", "background:#334155;color:#fff;padding:0 4px;border-radius:3px", "color:inherit",
         logRule
       );
@@ -100,7 +102,8 @@
     if (!rule) return nativeFetch(input, init);
     showRuleToast(rule, original.url, original.method);
     const request = await applyRequestOverride(original, rule.request);
-    if (rule.response?.enabled) return mockResponse(rule.response);
+    const response = responseForRule(rule);
+    if (response?.enabled) return mockResponse(response);
     return nativeFetch(request);
   };
 
@@ -135,8 +138,8 @@
     for (const [name, value] of Object.entries(parseHeaders(details.override.headers))) {
       if (value !== null && value !== "" && !details.overriddenHeaders?.has(name.toLowerCase())) nativeSetRequestHeader.call(this, name, String(value));
     }
-    if (details.rule.response?.enabled) {
-      const response = details.rule.response;
+    const response = responseForRule(details.rule);
+    if (response?.enabled) {
       const status = Number(response.status) || 200;
       const text = response.body ?? "";
       const headers = parseHeaders(response.headers);

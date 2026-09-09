@@ -16,7 +16,7 @@
     name: nameFromUrl("https://jsonplaceholder.typicode.com/posts/1?test=*"),
     match: { urlPattern: "https://jsonplaceholder.typicode.com/posts/1?test=*", method: "GET" },
     request: { url: "", method: "", headers: "{}", body: "" },
-    response: { enabled: true, status: 200, statusText: "OK", headers: '{"content-type":"application/json"}', body: '{"id":1,"title":"Mocked post","body":"This response is mocked locally.","userId":1}', delayMs: 0 }
+    responses: [{ enabled: true, status: 200, statusText: "OK", headers: '{"content-type":"application/json"}', body: '{"id":1,"title":"Mocked post","body":"This response is mocked locally.","userId":1}', delayMs: 0 }]
   });
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
@@ -38,5 +38,20 @@
     return JSON.parse(normalizedStrings);
   };
 
-  window.ApiMockOptionsUtils = { nameFromUrl, makeRule, esc, methodClass, pathPreview, writePath, parsePastedJson };
+  const normalizeRule = (rule) => {
+    const normalized = JSON.parse(JSON.stringify(rule));
+    if (!Array.isArray(normalized.responses)) normalized.responses = normalized.response ? [{ ...normalized.response }] : makeRule().responses;
+    if (!normalized.responses.length) normalized.responses = makeRule().responses;
+    delete normalized.response;
+    normalized.responses = normalized.responses.map((response) => {
+      const normalizedResponse = { ...response };
+      delete normalizedResponse.name;
+      return normalizedResponse;
+    });
+    normalized.defaultResponseIndex = Math.min(Math.max(Number(normalized.defaultResponseIndex) || 0, 0), normalized.responses.length - 1);
+    normalized.response = normalized.responses[0];
+    return normalized;
+  };
+
+  window.ApiMockOptionsUtils = { nameFromUrl, makeRule, esc, methodClass, pathPreview, writePath, parsePastedJson, normalizeRule };
 })();

@@ -1,16 +1,22 @@
 const $ = (selector, element = document) => element.querySelector(selector);
 const rulesElement = $("#rules");
-let state = { enabled: false, rules: [] };
+let state = { enabled: false, darkMode: false, rules: [] };
 let selectedRuleId = null;
 let activeView = "response";
-const { nameFromUrl, makeRule, esc, methodClass, pathPreview, writePath, parsePastedJson } = window.ApiMockOptionsUtils;
+let activeResponseIndex = 0;
+const { nameFromUrl, makeRule, esc, methodClass, pathPreview, writePath, parsePastedJson, normalizeRule } = window.ApiMockOptionsUtils;
 
 $("#version-name").textContent = `v${chrome.runtime.getManifest().version}`;
-function persist(callback) { chrome.storage.local.set({ enabled: state.enabled, rules: state.rules.filter((rule) => !rule._isNew) }, callback); }
+function cleanRule(rule) { const copy = JSON.parse(JSON.stringify(rule)); delete copy._isNew; delete copy.response; return copy; }
+function persist(callback) { chrome.storage.local.set({ enabled: state.enabled, darkMode: state.darkMode, rules: state.rules.filter((rule) => !rule._isNew).map(cleanRule) }, callback); }
+function applyTheme() {
+  document.body.classList.toggle("dark-mode", state.darkMode);
+  $("#dark-mode").checked = state.darkMode;
+}
 function exportMocks() {
   const rules = state.rules.filter((rule) => rule.enabled);
   if (!rules.length) { alert("Select at least one mock to export."); return; }
-  const payload = { version: 1, enabled: state.enabled, rules: rules.map((rule) => { const copy = { ...rule }; delete copy._isNew; return copy; }) };
+  const payload = { version: 1, enabled: state.enabled, rules: rules.map(cleanRule) };
   const exportName = rules.length === 1
     ? (rules[0].name || "api-mock").replace(/[\\/:*?"<>|]+/g, "-").trim()
     : "selected-api-mocks";
@@ -23,10 +29,10 @@ function exportMocks() {
 function importMocks(file) {
   file.text().then((text) => {
     const payload = JSON.parse(text);
-    if (payload?.version !== 1 || !Array.isArray(payload.rules) || payload.rules.some((rule) => !rule?.id || !rule.match?.urlPattern || !rule.match?.method || !rule.response)) throw new Error("Invalid mock export");
+    if (payload?.version !== 1 || !Array.isArray(payload.rules) || payload.rules.some((rule) => !rule?.id || !rule.match?.urlPattern || !rule.match?.method || (!rule.responses && !rule.response))) throw new Error("Invalid mock export");
     const existingIds = new Set(state.rules.map((rule) => rule.id));
     const importedRules = payload.rules.map((rule) => {
-      const copy = JSON.parse(JSON.stringify(rule));
+      const copy = normalizeRule(rule);
       if (existingIds.has(copy.id)) copy.id = crypto.randomUUID();
       existingIds.add(copy.id);
       delete copy._isNew;
@@ -34,6 +40,7 @@ function importMocks(file) {
     });
     state.rules = [...state.rules, ...importedRules];
     selectedRuleId = state.rules[0]?.id || null;
+    activeResponseIndex = 0;
     persist(() => {
       $("#enabled").checked = state.enabled;
       $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive";
@@ -48,9 +55,15 @@ const editorTemplate = (rule) => `<div class="editor" data-id="${esc(rule.id)}">
 function render() {
   if (!selectedRuleId || !state.rules.some((rule) => rule.id === selectedRuleId)) selectedRuleId = state.rules[0]?.id || null;
   const selectedRule = state.rules.find((rule) => rule.id === selectedRuleId);
+  if (selectedRule) {
+    activeResponseIndex = Math.min(activeResponseIndex, selectedRule.responses.length - 1);
+    selectedRule.response = selectedRule.responses[activeResponseIndex];
+  }
   rulesElement.innerHTML = `<aside class="mock-rail"><div class="rail-heading"><span>Mocks</span><span class="rail-heading-actions"><span class="rail-count">${state.rules.length}</span><button id="import-mocks" class="rail-action" type="button" title="Import mocks">↥ Import</button><button id="export-mocks" class="rail-action" type="button" title="Export checked mocks">↧ Export</button><button id="rail-add" class="rail-action rail-add" type="button" aria-label="New mock" title="New mock">＋</button></span></div><div class="mock-list">${state.rules.map(listTemplate).join("")}</div></aside><section class="editor-stage">${selectedRule ? editorTemplate(selectedRule) : `<div class="empty-editor"><strong>No mocks yet</strong><span>Create a mock to start building a response.</span><button id="empty-add" class="btn btn-primary" type="button">+ New mock</button></div>`}</section>`;
   const responseMeta = $(".response-meta");
   if (responseMeta) {
+    const responsePanel = $(".editor-panel[data-panel=\"response\"]");
+    responsePanel.insertAdjacentHTML("afterbegin", `<div class="response-variants" role="tablist" aria-label="Mock responses">${selectedRule.responses.map((response, index) => `<button class="response-variant ${index === activeResponseIndex ? "active" : ""}" type="button" data-response-index="${index}" role="tab" aria-selected="${index === activeResponseIndex}"><span>${esc(response.status)} response</span>${selectedRule.responses.length > 1 ? `<span class="response-variant-close" data-delete-response aria-label="Delete ${esc(response.status)} response" title="Delete response">×</span>` : ""}</button>`).join("")}<button class="add-response" type="button" data-add-response>＋ Add response</button></div>`);
     const controls = responseMeta.querySelectorAll("label");
     if (controls[0]) {
       controls[0].classList.add("response-toggle-control");
@@ -68,10 +81,11 @@ function render() {
 }
 
 function markDirty(editor) { editor.classList.add("dirty"); const button = $(".publish", editor); if (button) button.disabled = false; }
-function collectRule(editor, baseRule) { const rule = JSON.parse(JSON.stringify(baseRule)); editor.querySelectorAll("[data-path]").forEach((field) => writePath(rule, field.dataset.path, field.type === "number" ? Number(field.value) : field.value)); rule.enabled = $(".rule-enabled", editor)?.checked ?? rule.enabled; rule.response.enabled = $(".response-enabled", editor)?.checked ?? rule.response.enabled; delete rule._isNew; return rule; }
-function addRule() { const rule = { ...makeRule(), _isNew: true }; state.rules.push(rule); selectedRuleId = rule.id; activeView = "response"; render(); const editor = $(".editor"); markDirty(editor); $(".editor-url", editor)?.focus(); }
+function collectRule(editor, baseRule) { const rule = JSON.parse(JSON.stringify(baseRule)); editor.querySelectorAll("[data-path]").forEach((field) => writePath(rule, field.dataset.path, field.type === "number" ? Number(field.value) : field.value)); rule.enabled = $(".rule-enabled", editor)?.checked ?? rule.enabled; rule.responses[activeResponseIndex] = rule.response; rule.defaultResponseIndex = activeResponseIndex; delete rule._isNew; return rule; }
+function addRule() { const rule = { ...makeRule(), _isNew: true }; rule.response = rule.responses[0]; state.rules.push(rule); selectedRuleId = rule.id; activeResponseIndex = 0; activeView = "response"; render(); const editor = $(".editor"); markDirty(editor); $(".editor-url", editor)?.focus(); }
 
 $("#enabled").addEventListener("change", (event) => { state.enabled = event.target.checked; persist(); $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive"; });
+$("#dark-mode").addEventListener("change", (event) => { state.darkMode = event.target.checked; applyTheme(); persist(); });
 $("#add").addEventListener("click", addRule);
 rulesElement.addEventListener("click", (event) => {
   if (event.target.closest("#import-mocks")) { $("#import-file").click(); return; }
@@ -94,6 +108,10 @@ rulesElement.addEventListener("click", (event) => {
   if (event.target.closest("#rail-add, #empty-add")) { addRule(); return; }
   const editor = event.target.closest(".editor");
   if (!editor) return;
+  if (event.target.closest("[data-delete-response]")) { const rule = state.rules.find((item) => item.id === editor.dataset.id); if (rule && rule.responses.length > 1) { rule.responses[activeResponseIndex] = rule.response; rule.responses.splice(activeResponseIndex, 1); activeResponseIndex = Math.min(activeResponseIndex, rule.responses.length - 1); rule.response = rule.responses[activeResponseIndex]; render(); markDirty($(".editor")); } return; }
+  const responseTab = event.target.closest("[data-response-index]");
+  if (responseTab) { const rule = state.rules.find((item) => item.id === editor.dataset.id); if (rule) { rule.responses[activeResponseIndex] = rule.response; activeResponseIndex = Number(responseTab.dataset.responseIndex); rule.response = rule.responses[activeResponseIndex]; render(); markDirty($(".editor")); } return; }
+  if (event.target.closest("[data-add-response]")) { const rule = state.rules.find((item) => item.id === editor.dataset.id); if (rule) { rule.responses[activeResponseIndex] = rule.response; rule.responses.push({ ...rule.responses[0] }); activeResponseIndex = rule.responses.length - 1; rule.response = rule.responses[activeResponseIndex]; render(); markDirty($(".editor")); } return; }
   const tab = event.target.closest(".editor-tab");
   if (tab) { activeView = tab.dataset.view; render(); return; }
   const format = event.target.closest(".format-json");
@@ -134,4 +152,4 @@ rulesElement.addEventListener("change", (event) => {
     if (rule) { rule.enabled = event.target.checked; persist(); }
   }
 });
-chrome.storage.local.get(state, (saved) => { state = saved; $("#enabled").checked = state.enabled; $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive"; render(); });
+chrome.storage.local.get(state, (saved) => { state = { ...state, ...saved, rules: (saved.rules || []).map(normalizeRule) }; $("#enabled").checked = state.enabled; $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive"; applyTheme(); render(); });
