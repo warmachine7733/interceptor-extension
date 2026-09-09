@@ -29,6 +29,11 @@ test("matches wildcard query patterns", () => {
 	const queryPathRule = { ...pathRule, match: { ...pathRule.match, urlPattern: "https://jsonplaceholder.typicode.com/posts/*?test=*" } };
 	assert.equal(firstMatch([queryPathRule], "https://jsonplaceholder.typicode.com/posts/1?test=1234", "GET"), queryPathRule);
 });
+test("matches comma-separated query values", () => {
+	const commaRule = { enabled: true, match: { urlPattern: "https://jsonplaceholder.typicode.com/posts/1?test=1234,123", method: "GET" } };
+	assert.equal(firstMatch([commaRule], "https://jsonplaceholder.typicode.com/posts/1?test=1234,123", "GET"), commaRule);
+	assert.equal(firstMatch([commaRule], "https://jsonplaceholder.typicode.com/posts/1?test=1234%2C123", "GET"), commaRule);
+});
 test("skips disabled rules and honors priority", () => { const disabled = { ...rule, enabled: false }; assert.equal(firstMatch([disabled, rule], "https://api.example.com/users/42", "GET"), rule); });
 test("parses valid headers and safely handles malformed headers", () => {
 	assert.deepEqual({ ...parseHeaders('{"x-test":"yes"}') }, { "x-test": "yes" });

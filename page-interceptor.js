@@ -5,10 +5,11 @@
   let config = { enabled: false, rules: [] };
   const rules = window.ApiMockRules || (() => {
     const normalizeMethod = (method) => (method || "*").toUpperCase();
-    const patternToRegex = (pattern) => new RegExp(`^${String(pattern || "*")
+    const normalizeUrl = (url) => String(url).replace(/%2C/gi, ",");
+    const patternToRegex = (pattern) => new RegExp(`^${normalizeUrl(pattern || "*")
       .replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
     const firstMatch = (rules, url, method) => (rules || []).find((rule) => {
-      if (!rule?.enabled || !patternToRegex(rule.match?.urlPattern).test(url)) return false;
+      if (!rule?.enabled || !patternToRegex(rule.match?.urlPattern).test(normalizeUrl(url))) return false;
       const expectedMethod = normalizeMethod(rule.match?.method);
       return expectedMethod === "*" || expectedMethod === normalizeMethod(method);
     }) || null;
@@ -51,11 +52,11 @@
       toastState.lastShown.set(key, now);
       if (!toastState.container?.isConnected) {
         toastState.container = document.createElement("div");
-        toastState.container.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;pointer-events:none;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;";
+        toastState.container.style.cssText = "position:fixed;top:16px;right:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;pointer-events:none;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;";
         (document.body || document.documentElement).appendChild(toastState.container);
       }
       const toast = document.createElement("div");
-      toast.style.cssText = "pointer-events:auto;cursor:pointer;background:#1e293b;color:#f8fafc;padding:10px 14px 6px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.35);font-size:13px;line-height:1.4;max-width:360px;border-left:3px solid #22c55e;opacity:0;transform:translateY(8px);transition:opacity .2s ease,transform .2s ease;overflow:hidden;";
+      toast.style.cssText = "pointer-events:auto;cursor:pointer;background:#1e293b;color:#f8fafc;padding:10px 14px 6px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.35);font-size:13px;line-height:1.4;max-width:360px;border-left:3px solid #22c55e;opacity:0;transform:translateY(-8px);transition:opacity .2s ease,transform .2s ease;overflow:hidden;";
       const title = document.createElement("div");
       title.style.cssText = "font-weight:600;";
       title.textContent = `⚡ ${rule?.response?.enabled ? "Mocked" : "Intercepted"}: ${rule?.name || "Unnamed rule"}`;
@@ -66,7 +67,7 @@
       const bar = document.createElement("div");
       bar.style.cssText = `height:3px;border-radius:2px;background:#22c55e;margin-top:8px;width:100%;transition:width ${DURATION}ms linear;`;
       toast.append(title, detail, bar);
-      const dismiss = () => { toast.style.opacity = "0"; toast.style.transform = "translateY(8px)"; setTimeout(() => toast.remove(), 250); };
+      const dismiss = () => { toast.style.opacity = "0"; toast.style.transform = "translateY(-8px)"; setTimeout(() => toast.remove(), 250); };
       toast.addEventListener("click", dismiss);
       toastState.container.appendChild(toast);
       setTimeout(() => { toast.style.opacity = "1"; toast.style.transform = "translateY(0)"; bar.style.width = "0%"; }, 30);

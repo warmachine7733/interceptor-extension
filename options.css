@@ -52,7 +52,10 @@ input:checked + .slider:before { transform: translateX(16px); }
 #rules { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); min-height: calc(100vh - 142px); overflow: hidden; border: 1px solid var(--line); background: var(--panel); }
 .mock-rail { min-width: 0; padding: 18px 12px 14px; border-right: 1px solid var(--line); background: #fafbfc; }
 .rail-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 10px; color: #757c84; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+.rail-heading-actions { display: flex; align-items: center; gap: 4px; }
 .rail-count { min-width: 20px; padding: 2px 5px; border-radius: 9px; color: #747a82; background: #e9ecef; text-align: center; font-size: 10px; letter-spacing: 0; }
+.rail-action { padding: 3px 4px; border: 0; border-radius: 3px; color: #747a82; background: transparent; font-size: 10px; font-weight: 700; }
+.rail-action:hover { color: var(--orange-dark); background: #fff0e4; }
 .mock-list { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
 .mock-item { min-width: 0; }
 .mock-select { width: 100%; padding: 10px 9px 8px; border: 1px solid transparent; border-radius: 5px; color: var(--ink); background: transparent; text-align: left; }
@@ -69,8 +72,6 @@ input:checked + .slider:before { transform: translateX(16px); }
 .mock-meta > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .method-text { font-weight: 700; }
 .method-get { color: #2f7d4a; }.method-post { color: #2469a8; }.method-put { color: #b35f16; }.method-patch { color: #7950a5; }.method-delete { color: #b33a3a; }.method-star { color: #a04476; }
-.rail-add { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; margin-top: 12px; padding: 8px; border: 1px dashed #ccd1d6; border-radius: 4px; color: var(--orange-dark); background: transparent; font-size: 12px; font-weight: 700; }
-.rail-add:hover { border-color: var(--orange); background: #fff8f1; }
 
 .editor-stage { min-width: 0; position: relative; background: #fff; }
 .editor { min-width: 0; height: 100%; display: flex; flex-direction: column; }
