@@ -4,12 +4,20 @@
 
   let config = { enabled: false, rules: [] };
   const rules = window.ApiMockRules || (() => {
-    const normalizeMethod = (method) => (method || "*").toUpperCase();
-    const normalizeUrl = (url) => String(url).replace(/%2C/gi, ",");
-    const patternToRegex = (pattern) => new RegExp(`^${normalizeUrl(pattern || "*")
-      .replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
+    const normalizeMethod = (method) => String(method || "*").trim().toUpperCase();
+    const normalizeUrl = (url) => String(url ?? "").trim().replace(/%2C/gi, ",");
+    const patternToRegex = (pattern) => {
+      const value = normalizeUrl(pattern || "*");
+      const hasQuery = value.includes("?");
+      const escaped = value
+        .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, hasQuery ? ".*" : "[^?]*");
+      return new RegExp(`^${escaped}$`);
+    };
     const firstMatch = (rules, url, method) => (rules || []).find((rule) => {
-      if (!rule?.enabled || !patternToRegex(rule.match?.urlPattern).test(normalizeUrl(url))) return false;
+      if (!rule?.enabled) return false;
+      const pattern = String(rule.match?.urlPattern || "*").trim();
+      if (!patternToRegex(pattern).test(normalizeUrl(url))) return false;
       const expectedMethod = normalizeMethod(rule.match?.method);
       return expectedMethod === "*" || expectedMethod === normalizeMethod(method);
     }) || null;
@@ -81,10 +89,12 @@
     for (const [key, value] of Object.entries(parseHeaders(override.headers))) {
       if (value === null || value === "") headers.delete(key); else headers.set(key, String(value));
     }
-    const method = (override.method || request.method).toUpperCase();
+    const overrideMethod = override.method ? String(override.method).trim().toUpperCase() : "";
+    const method = overrideMethod || request.method.toUpperCase();
     const init = { method, headers, credentials: request.credentials, cache: request.cache, redirect: request.redirect, referrer: request.referrer, referrerPolicy: request.referrerPolicy, mode: request.mode, integrity: request.integrity };
     if (!/^(GET|HEAD)$/.test(method)) init.body = override.body !== undefined ? override.body : await request.clone().text();
-    return new Request(override.url || request.url, init);
+    const overrideUrl = override.url ? String(override.url).trim() : "";
+    return new Request(overrideUrl || request.url, init);
   };
   const mockResponse = async (response) => {
     await sleep(response.delayMs);
@@ -115,8 +125,11 @@
     const absoluteUrl = new URL(url, location.href).href;
     const rule = matchingRule(absoluteUrl, method);
     const override = rule?.request || {};
-    meta.set(this, { rule, method: (override.method || method).toUpperCase(), url: override.url || absoluteUrl, override });
-    return nativeOpen.call(this, override.method || method, override.url || url, ...rest);
+    const overrideUrl = override.url ? String(override.url).trim() : "";
+    const overrideMethod = override.method ? String(override.method).trim().toUpperCase() : "";
+    const finalMethod = overrideMethod || method.toUpperCase();
+    meta.set(this, { rule, method: finalMethod, url: overrideUrl || absoluteUrl, override });
+    return nativeOpen.call(this, finalMethod, overrideUrl || url, ...rest);
   };
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
     const details = meta.get(this);

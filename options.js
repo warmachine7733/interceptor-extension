@@ -4,7 +4,7 @@ let state = { enabled: false, darkMode: false, rules: [] };
 let selectedRuleId = null;
 let activeView = "response";
 let activeResponseIndex = 0;
-const { nameFromUrl, makeRule, esc, methodClass, pathPreview, writePath, parsePastedJson, normalizeRule } = window.ApiMockOptionsUtils;
+const { nameFromUrl, makeRule, esc, methodClass, pathPreview, writePath, parsePastedJson, formatJson, normalizeRule } = window.ApiMockOptionsUtils;
 
 $("#version-name").textContent = `v${chrome.runtime.getManifest().version}`;
 function cleanRule(rule) { const copy = JSON.parse(JSON.stringify(rule)); delete copy._isNew; delete copy.response; return copy; }
@@ -50,7 +50,7 @@ function importMocks(file) {
 }
 const listTemplate = (rule) => `<article class="mock-item ${rule.id === selectedRuleId ? "selected" : ""}" data-id="${esc(rule.id)}"><button class="mock-select" type="button" aria-label="Open ${esc(rule.name)}"><span class="mock-topline"><input class="rule-enabled" type="checkbox" ${rule.enabled ? "checked" : ""} aria-label="Enable ${esc(rule.name)}"><span class="mock-name">${esc(rule.name)}</span><span class="mock-more" aria-hidden="true">&#8942;</span><span class="mock-trash" role="img" aria-label="Delete mock" title="Delete mock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3m-8 0 1 13h8l1-13m-6 4v5m4-5v5"></path></svg></span></span><span class="mock-meta"><span class="method-text ${methodClass(rule.match.method)}">${esc(rule.match.method)}</span><span>${esc(pathPreview(rule.match.urlPattern))}</span></span></button></article>`;
 
-const editorTemplate = (rule) => `<div class="editor" data-id="${esc(rule.id)}"><div class="request-bar"><select class="editor-method" data-path="match.method" aria-label="HTTP method">${["*","GET","POST","PUT","PATCH","DELETE","HEAD"].map((method) => `<option ${rule.match.method === method ? "selected" : ""}>${method}</option>`).join("")}</select><input class="editor-url" data-path="match.urlPattern" value="${esc(rule.match.urlPattern)}" aria-label="URL pattern"><span class="dirty-badge">Unsaved changes</span><button class="publish" type="button" ${rule._isNew ? "" : "disabled"}>Publish</button></div><div class="editor-tabs" role="tablist"><button class="editor-tab ${activeView === "response" ? "active" : ""}" type="button" data-view="response" role="tab" aria-selected="${activeView === "response"}">Response</button><button class="editor-tab ${activeView === "request" ? "active" : ""}" type="button" data-view="request" role="tab" aria-selected="${activeView === "request"}">Request</button></div><div class="editor-panel ${activeView === "response" ? "active" : ""}" data-panel="response"><div class="response-meta"><label>Return mock response<input class="response-enabled" type="checkbox" ${rule.response.enabled ? "checked" : ""}></label><label>Status<input data-path="response.status" type="number" value="${esc(rule.response.status)}"></label><label>Delay (ms)<input data-path="response.delayMs" type="number" value="${esc(rule.response.delayMs)}"></label><label class="headers-compact">Headers<textarea data-path="response.headers">${esc(rule.response.headers)}</textarea></label></div><div class="body-heading"><span>Response body</span><button class="format-json" type="button">Format JSON</button></div><textarea class="body-editor" data-path="response.body" spellcheck="false">${esc(rule.response.body)}</textarea></div><div class="editor-panel ${activeView === "request" ? "active" : ""}" data-panel="request"><div class="fields"><label>Replacement URL<input data-path="request.url" placeholder="Leave empty to keep original" value="${esc(rule.request.url)}"></label><label>Replacement Method<input data-path="request.method" placeholder="GET, POST, etc." value="${esc(rule.request.method)}"></label></div><label>Request headers<textarea data-path="request.headers">${esc(rule.request.headers)}</textarea></label><label>Request body<textarea class="request-body" data-path="request.body" placeholder="{}">${esc(rule.request.body)}</textarea></label></div></div>`;
+const editorTemplate = (rule) => `<div class="editor" data-id="${esc(rule.id)}"><div class="request-bar"><select class="editor-method" data-path="match.method" aria-label="HTTP method">${["*","GET","POST","PUT","PATCH","DELETE","HEAD"].map((method) => `<option ${rule.match.method === method ? "selected" : ""}>${method}</option>`).join("")}</select><input class="editor-url" data-path="match.urlPattern" value="${esc(rule.match.urlPattern)}" aria-label="URL pattern"><span class="dirty-badge">Unsaved changes</span><button class="publish" type="button" ${rule._isNew ? "" : "disabled"}>Publish</button></div><div class="editor-tabs" role="tablist"><button class="editor-tab ${activeView === "response" ? "active" : ""}" type="button" data-view="response" role="tab" aria-selected="${activeView === "response"}">Response</button><button class="editor-tab ${activeView === "request" ? "active" : ""}" type="button" data-view="request" role="tab" aria-selected="${activeView === "request"}">Request</button></div><div class="editor-panel ${activeView === "response" ? "active" : ""}" data-panel="response"><div class="response-meta"><label>Return mock response<input class="response-enabled" type="checkbox" ${rule.response.enabled ? "checked" : ""}></label><label>Status<input data-path="response.status" type="number" value="${esc(rule.response.status)}"></label><label>Delay (ms)<input data-path="response.delayMs" type="number" value="${esc(rule.response.delayMs)}"></label><label class="headers-compact">Headers<textarea data-path="response.headers">${esc(rule.response.headers)}</textarea></label></div><div class="body-heading"><span>Response body</span><button class="format-json" type="button" data-target="response.body">Format JSON</button></div><textarea class="body-editor" data-path="response.body" spellcheck="false">${esc(rule.response.body)}</textarea></div><div class="editor-panel ${activeView === "request" ? "active" : ""}" data-panel="request"><div class="fields"><label>Replacement URL<input data-path="request.url" placeholder="Leave empty to keep original" value="${esc(rule.request.url)}"></label><label>Replacement Method<input data-path="request.method" placeholder="GET, POST, etc." value="${esc(rule.request.method)}"></label></div><label>Request headers<textarea data-path="request.headers">${esc(rule.request.headers)}</textarea></label><div class="body-heading"><span>Request body</span><button class="format-json" type="button" data-target="request.body">Format JSON</button></div><textarea class="body-editor request-body" data-path="request.body" spellcheck="false" placeholder="{}">${esc(rule.request.body)}</textarea></div></div>`;
 
 function render() {
   if (!selectedRuleId || !state.rules.some((rule) => rule.id === selectedRuleId)) selectedRuleId = state.rules[0]?.id || null;
@@ -81,7 +81,23 @@ function render() {
 }
 
 function markDirty(editor) { editor.classList.add("dirty"); const button = $(".publish", editor); if (button) button.disabled = false; }
-function collectRule(editor, baseRule) { const rule = JSON.parse(JSON.stringify(baseRule)); editor.querySelectorAll("[data-path]").forEach((field) => writePath(rule, field.dataset.path, field.type === "number" ? Number(field.value) : field.value)); rule.enabled = $(".rule-enabled", editor)?.checked ?? rule.enabled; rule.response.enabled = $(".response-enabled", editor)?.checked ?? rule.response.enabled; rule.responses[activeResponseIndex] = rule.response; rule.defaultResponseIndex = activeResponseIndex; delete rule._isNew; return rule; }
+function collectRule(editor, baseRule) {
+  const rule = JSON.parse(JSON.stringify(baseRule));
+  editor.querySelectorAll("[data-path]").forEach((field) => {
+    let value = field.type === "number" ? Number(field.value) : field.value;
+    if (typeof value === "string" && (field.dataset.path === "match.urlPattern" || field.dataset.path === "request.url" || field.dataset.path === "match.method" || field.dataset.path === "request.method")) {
+      value = value.trim();
+    }
+    writePath(rule, field.dataset.path, value);
+  });
+  rule.name = nameFromUrl(rule.match?.urlPattern);
+  rule.enabled = $(".rule-enabled", editor)?.checked ?? rule.enabled;
+  rule.response.enabled = $(".response-enabled", editor)?.checked ?? rule.response.enabled;
+  rule.responses[activeResponseIndex] = rule.response;
+  rule.defaultResponseIndex = activeResponseIndex;
+  delete rule._isNew;
+  return rule;
+}
 function addRule() { const rule = { ...makeRule(), _isNew: true }; rule.response = rule.responses[0]; state.rules.push(rule); selectedRuleId = rule.id; activeResponseIndex = 0; activeView = "response"; render(); const editor = $(".editor"); markDirty(editor); $(".editor-url", editor)?.focus(); }
 
 $("#enabled").addEventListener("change", (event) => { state.enabled = event.target.checked; persist(); $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive"; });
@@ -115,7 +131,22 @@ rulesElement.addEventListener("click", (event) => {
   const tab = event.target.closest(".editor-tab");
   if (tab) { activeView = tab.dataset.view; render(); return; }
   const format = event.target.closest(".format-json");
-  if (format) { const body = $("[data-path=\"response.body\"]", editor); try { body.value = JSON.stringify(parsePastedJson(body.value), null, 2); format.textContent = "Formatted"; markDirty(editor); setTimeout(() => { format.textContent = "Format JSON"; }, 1000); } catch { format.textContent = "Invalid JSON"; setTimeout(() => { format.textContent = "Format JSON"; }, 1200); } return; }
+  if (format) {
+    const targetPath = format.dataset.target || (format.closest("[data-panel=\"request\"]") ? "request.body" : "response.body");
+    const body = $(`[data-path="${targetPath}"]`, editor);
+    if (body) {
+      try {
+        body.value = formatJson(body.value);
+        format.textContent = "Formatted";
+        markDirty(editor);
+        setTimeout(() => { format.textContent = "Format JSON"; }, 1000);
+      } catch {
+        format.textContent = "Invalid JSON";
+        setTimeout(() => { format.textContent = "Format JSON"; }, 1200);
+      }
+    }
+    return;
+  }
   if (event.target.closest(".delete")) { state.rules = state.rules.filter((rule) => rule.id !== editor.dataset.id); selectedRuleId = state.rules[0]?.id || null; persist(); render(); return; }
   if (event.target.closest(".publish")) {
     const index = state.rules.findIndex((rule) => rule.id === editor.dataset.id);
@@ -146,7 +177,12 @@ rulesElement.addEventListener("input", (event) => {
 });
 rulesElement.addEventListener("change", (event) => {
   const editor = event.target.closest(".editor");
-  if (editor && (event.target.dataset.path || event.target.classList.contains("response-enabled"))) markDirty(editor);
+  if (editor && (event.target.dataset.path || event.target.classList.contains("response-enabled"))) {
+    if (typeof event.target.value === "string" && (event.target.dataset.path === "match.urlPattern" || event.target.dataset.path === "request.url" || event.target.dataset.path === "match.method" || event.target.dataset.path === "request.method")) {
+      event.target.value = event.target.value.trim();
+    }
+    markDirty(editor);
+  }
   if (event.target.classList.contains("rule-enabled")) {
     const rule = state.rules.find((item) => item.id === event.target.closest(".mock-item").dataset.id);
     if (rule) { rule.enabled = event.target.checked; persist(); }

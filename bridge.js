@@ -15,7 +15,7 @@
     const rule = matchingStylesheetRule(link);
     if (!rule) return;
     handledLinks.add(link);
-    const targetUrl = rule.request?.url || link.href;
+    const targetUrl = (rule.request?.url ? String(rule.request.url).trim() : "") || link.href;
     const response = rule.responses?.[0] || rule.response;
     if (response?.enabled) {
       const css = response.body ?? "";

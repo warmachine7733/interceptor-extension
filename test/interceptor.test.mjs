@@ -121,6 +121,33 @@ test("unchecked response passes through using request overrides", async () => {
   assert.deepEqual(calls.nativeFetch, ["https://api.example.com/rewritten"]);
 });
 
+test("fetch matches rules and applies request overrides with leading/trailing whitespace", async () => {
+  const rule = {
+    ...RULE,
+    match: { urlPattern: "  https://api.example.com/*  ", method: "  GET  " },
+    request: { url: "  https://api.example.com/trimmed-rewrite  ", method: "  POST  ", headers: "{}", body: "" },
+    response: { ...RULE.response, enabled: false }
+  };
+  const { sandbox, calls } = buildPageContext({ enabled: true, rules: [rule] });
+  await new Promise((r) => setTimeout(r, 0));
+  const result = await sandbox.fetch("https://api.example.com/users/1");
+  assert.equal(result, "NATIVE");
+  assert.deepEqual(calls.nativeFetch, ["https://api.example.com/trimmed-rewrite"]);
+});
+
+test("fetch handles whitespace-only request override url by falling back to original url", async () => {
+  const rule = {
+    ...RULE,
+    request: { url: "   ", method: "POST", headers: "{}", body: "" },
+    response: { ...RULE.response, enabled: false }
+  };
+  const { sandbox, calls } = buildPageContext({ enabled: true, rules: [rule] });
+  await new Promise((r) => setTimeout(r, 0));
+  const result = await sandbox.fetch("https://api.example.com/users/1");
+  assert.equal(result, "NATIVE");
+  assert.deepEqual(calls.nativeFetch, ["https://api.example.com/users/1"]);
+});
+
 test("XMLHttpRequest is intercepted and mocked", async () => {
   const { sandbox, calls } = buildPageContext({ enabled: true, rules: [RULE] });
   await new Promise((r) => setTimeout(r, 0));
@@ -133,4 +160,19 @@ test("XMLHttpRequest is intercepted and mocked", async () => {
   assert.equal(calls.xhrSent, undefined, "native send should NOT be called");
   assert.equal(loaded, '{"mocked":true}');
   assert.equal(xhr.status, 200);
+});
+
+test("XMLHttpRequest intercepts rule with leading/trailing whitespace in pattern and override url", async () => {
+  const rule = {
+    ...RULE,
+    match: { urlPattern: "  https://api.example.com/*  ", method: "  GET  " },
+    request: { url: "  https://api.example.com/overridden-xhr  ", method: "  GET  ", headers: "{}", body: "" },
+    response: { ...RULE.response, enabled: false }
+  };
+  const { sandbox, calls } = buildPageContext({ enabled: true, rules: [rule] });
+  await new Promise((r) => setTimeout(r, 0));
+  const xhr = new sandbox.XMLHttpRequest();
+  xhr.open("GET", "https://api.example.com/users/1");
+  xhr.send();
+  assert.equal(calls.xhrOpen.url, "https://api.example.com/overridden-xhr");
 });

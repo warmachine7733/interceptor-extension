@@ -1,5 +1,11 @@
 # Release Log
 
+## 1.1.6
+- Added automatic trimming for leading and trailing whitespace in URL patterns and request override URLs.
+- Enhanced JSON formatting for response and request body editors to accept and format JavaScript object literals, relaxed JSON, template strings, and comments.
+- Added a "Format JSON" action to the request body editor.
+- Expanded test suite covering URL whitespace handling and JS object parsing/formatting.
+
 ## 1.1.5
 - Expanded automated test coverage and release validation.
 - Improved response variant selection and request handling.

@@ -1,6 +1,6 @@
 (() => {
-  const normalizeMethod = (method) => (method || "*").toUpperCase();
-  const normalizeUrl = (url) => String(url).replace(/%2C/gi, ",");
+  const normalizeMethod = (method) => String(method || "*").trim().toUpperCase();
+  const normalizeUrl = (url) => String(url ?? "").trim().replace(/%2C/gi, ",");
 
   const patternToRegex = (pattern) => {
     const value = normalizeUrl(pattern || "*");
@@ -13,7 +13,7 @@
 
   const matches = (rule, url, method) => {
     if (!rule?.enabled) return false;
-    const pattern = String(rule.match?.urlPattern || "*");
+    const pattern = String(rule.match?.urlPattern || "*").trim();
     if (!patternToRegex(pattern).test(normalizeUrl(url))) return false;
     const expectedMethod = normalizeMethod(rule.match?.method);
     return expectedMethod === "*" || expectedMethod === normalizeMethod(method);

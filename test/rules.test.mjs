@@ -39,6 +39,12 @@ test("matches DELETE requests", () => {
 	assert.equal(firstMatch([deleteRule], "https://jsonplaceholder.typicode.com/posts/1", "DELETE"), deleteRule);
 	assert.equal(firstMatch([deleteRule], "https://jsonplaceholder.typicode.com/posts/1", "GET"), null);
 });
+test("matches URLs and patterns with leading or trailing whitespace", () => {
+	const spacedRule = { enabled: true, match: { urlPattern: "  https://api.example.com/users/*  ", method: "  GET  " } };
+	assert.equal(firstMatch([spacedRule], "https://api.example.com/users/42", "GET"), spacedRule);
+	assert.equal(firstMatch([spacedRule], "  https://api.example.com/users/42  ", "GET"), spacedRule);
+	assert.equal(firstMatch([spacedRule], "https://api.example.com/users/42", "  GET  "), spacedRule);
+});
 test("skips disabled rules and honors priority", () => { const disabled = { ...rule, enabled: false }; assert.equal(firstMatch([disabled, rule], "https://api.example.com/users/42", "GET"), rule); });
 test("parses valid headers and safely handles malformed headers", () => {
 	assert.deepEqual({ ...parseHeaders('{"x-test":"yes"}') }, { "x-test": "yes" });

@@ -30,6 +30,10 @@ test("URL pattern matching with wildcards", () => {
   assert.ok(regex.test("https://api.example.com/users/abc/profile"));
   assert.ok(!regex.test("https://api.example.com/posts/42"));
   assert.ok(!regex.test("https://api.other.com/users/42"));
+
+  const spacedPattern = "   https://api.example.com/users/*   ";
+  const spacedRegex = patternToRegex(spacedPattern);
+  assert.ok(spacedRegex.test("https://api.example.com/users/42"));
 });
 
 test("Headers parsing with various formats", () => {
