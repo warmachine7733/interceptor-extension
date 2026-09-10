@@ -1,5 +1,11 @@
 # Release Log
 
+## 1.1.7
+- Revamped options UI with modern developer tool aesthetic (frosted glass header, glowing accents, refined method badges).
+- Added pre-release verification script (`npm run prerelease`) checking version sync, tests, build artifacts, and bundle contents.
+- Enhanced dark mode with deep obsidian/slate styling and high-contrast color scheme.
+- Improved interactive states, animated pulsing draft changes badge, and polished button transitions.
+
 ## 1.1.6
 - Added automatic trimming for leading and trailing whitespace in URL patterns and request override URLs.
 - Enhanced JSON formatting for response and request body editors to accept and format JavaScript object literals, relaxed JSON, template strings, and comments.
