@@ -19,6 +19,7 @@
     "test": "node --test test/*.test.mjs",
     "bump": "node bump-version.mjs",
     "prebuild": "node sync-version.mjs",
-    "build": "npx rimraf dist && npx mkdirp dist && npx bestzip dist/local-api-mock.zip manifest.json background.js bridge.js rules.js page-interceptor.js options.html options.css options-utils.js options.js icons LICENSE README.md CHANGELOG.md"
+    "build": "npx rimraf dist && npx mkdirp dist && npx bestzip dist/local-api-mock.zip manifest.json background.js bridge.js rules.js page-interceptor.js options.html options.css options-utils.js options.js icons LICENSE README.md CHANGELOG.md",
+    "prerelease": "node prerelease-check.mjs"
   }
 }

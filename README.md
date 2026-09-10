@@ -5,10 +5,14 @@ A minimal Chromium Manifest V3 extension for development-time API mocking. It in
 **Features:**
 - ✅ Intercepts fetch() and XMLHttpRequest
 - ✅ Mock responses with custom status, headers, body, and delay
+- ✅ Multiple response variants per mock with easy tab switching
 - ✅ Request overrides (URL, method, headers, body)
 - ✅ Local rule storage (no cloud, no telemetry)
-- ✅ URL pattern matching with wildcards
+- ✅ URL pattern matching with wildcards (automatic trimming of leading/trailing spaces)
 - ✅ Query-parameter matching, including wildcard values
+- ✅ Robust JSON formatter: parses standard JSON, relaxed JSON, and raw JavaScript object literals
+- ✅ Export & import mock rules as JSON
+- ✅ Dark mode support with sun/moon toggle
 - ✅ Publish-based rule editing so drafts do not apply while typing
 - ✅ Enable/disable toggle, inactive by default
 - ✅ On-page snackbar when a rule intercepts a request, with countdown
@@ -79,8 +83,20 @@ The request is modified before hitting the real API (no mock response sent).
 - `https://api.example.com/posts/1?test=*` — matches any value for `test`
 - `https://api.example.com/posts/1*` — matches the URL with or without query parameters
 
-The URL pattern matches the complete request URL. Query parameters are matched
+The URL pattern matches the complete request URL. Leading and trailing whitespace
+in URL boxes is automatically trimmed. Query parameters are matched
 literally, while `*` can be used for dynamic values.
+
+## Body Editor & Format JSON
+
+Both the **Response body** and **Request body** editors include a **Format JSON** button that cleanly formats and normalizes your data:
+- **Standard JSON:** Formats valid JSON into indented 2-space structure.
+- **JavaScript Objects:** Directly paste JS object literals (with unquoted keys, single quotes, template strings, trailing commas, comments, and functions/methods) — the formatter safely converts them into clean JSON without executing unsafe code.
+
+## Response Variants & Import/Export
+
+- **Response Variants:** Add multiple response variants per mock (e.g. `200 OK`, `400 Bad Request`, `500 Server Error`) and switch the active default variant with one click.
+- **Import / Export:** Export all enabled mocks to a `.json` backup file or import existing mocks directly from the sidebar.
 
 ## Publishing rules
 
