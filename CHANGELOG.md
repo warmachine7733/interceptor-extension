@@ -1,5 +1,13 @@
 # Release Log
 
+
+## 1.2.1
+- Scope mocking and recording to explicitly watched application hosts
+- Added an empty-by-default Watched Domains list: exact originating page host opt-in gates mocks, flow replay, and recording before request processing.
+- Preserved native fetch/XHR pass-through for unrelated hosts, including qBittorrent WebUI, with browser regression coverage.
+- Kept cross-origin API mocks working on watched apps, with independent iframe host checks and trusted sender validation for recordings.
+- Existing mocks and flows remain saved; add application hosts to the watchlist after upgrading.
+
 ## 1.2.0
 - Added flow recording and sequential API response replay with domain and page capture scopes.
 - Added a recording indicator with captured request counts.

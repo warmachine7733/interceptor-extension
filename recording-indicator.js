@@ -1,13 +1,15 @@
 (() => {
   if (window.top !== window || window.__LOCAL_API_MOCK_REC_INDICATOR__) return;
   window.__LOCAL_API_MOCK_REC_INDICATOR__ = true;
-  const { scopeMatches } = window.ApiMockRules;
+  const { scopeMatches, normalizeHosts } = window.ApiMockRules;
+  let watchedHosts = new Set();
+  const pageHost = (() => { try { return new URL(location.href || location.origin).host; } catch { return null; } })();
   let recording = null;
   let host = null;
   let name = null;
   let count = null;
   const update = () => {
-    const eligible = recording?.active && scopeMatches(recording.monitorScope, {
+    const eligible = recording?.active && watchedHosts.has(pageHost) && scopeMatches(recording.monitorScope, {
       origin: location.origin, pathname: location.pathname
     });
     if (!eligible) { host?.remove(); host = null; return; }
@@ -35,12 +37,23 @@
   window.addEventListener('message', event => {
     if (event.source !== window || event.data?.source !== 'local-api-mock' || event.data.type !== 'config') return;
     recording = event.data.config?.recording;
+    watchedHosts = new Set(normalizeHosts(event.data.config?.watchedHosts));
+    syncHistory();
     update();
   });
+  const historyHooks = [];
   for (const method of ['pushState', 'replaceState']) {
     const native = history[method];
-    history[method] = function (...args) { const result = native.apply(this, args); update(); return result; };
+    const wrapper = function (...args) { const result = native.apply(this, args); update(); return result; };
+    historyHooks.push({ method, native, wrapper });
   }
+  const syncHistory = () => {
+    const needed = recording?.active && watchedHosts.has(pageHost);
+    for (const { method, native, wrapper } of historyHooks) {
+      if (needed && history[method] === native) history[method] = wrapper;
+      else if (!needed && history[method] === wrapper) history[method] = native;
+    }
+  };
   window.addEventListener('popstate', update);
   window.addEventListener('pageshow', update);
   document.addEventListener('DOMContentLoaded', update, { once: true });

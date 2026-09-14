@@ -29,6 +29,36 @@ A minimal Chromium Manifest V3 extension for development-time API mocking. It in
 
 ## Install locally
 
+### Explicit opt-in with Watched Domains
+
+The watchlist starts empty, including after an upgrade. Existing mocks and flows
+stay saved but cannot intercept traffic until you explicitly add their application/page host
+under **Watched Domains**. Nothing is automatically added from old rules.
+
+Add `dummy-react-ui.vercel.app`, `localhost:3000`, or a full HTTP(S) URL. URLs are normalized
+to their lowercase `URL.host`, including non-default ports. Paths are discarded,
+duplicates are removed, and wildcards/credentials are rejected. A host does not
+include its subdomains or other ports. Private IPs work when explicitly listed.
+
+Requests from unwatched pages go directly to the original fetch/XHR before even
+inspecting the API URL. On a watched page, the destination URL and method choose
+the mock; no match means native pass-through. API hosts do not need to be listed.
+For example, watching dummy-react-ui.vercel.app permits its matching mocks for
+jsonplaceholder.typicode.com and any other API, but leaves Google and qBittorrent
+untouched. Recording remains independently activated but requires a watched page.
+Global recording scope cannot bypass that requirement.
+
+Each iframe uses its own document host, not its parent's host. The background
+recording writer validates Chrome's sender.url for that frame, not a host claimed
+in a page message. The same API called from an unwatched tab/frame stays real.
+Existing watchlist entries are preserved; replace any API-only entries with the
+application hosts where you want mocking to operate.
+
+For example, leave `192.168.88.5:8080` unlisted to leave qBittorrent requests alone.
+Reload app tabs after upgrading to replace the old injected scripts. Removing a
+host stops future matching; reload to clear an already displayed mock response
+or a previously replaced stylesheet.
+
 1. Open `chrome://extensions` and enable **Developer mode** (top right)
 2. Select **Load unpacked** and choose this repository folder
 3. Click the extension icon to open **Local API Mock** settings
@@ -141,7 +171,7 @@ testing a published rule. Individual rules must also be enabled.
 On Windows PowerShell, use `npm.cmd` if script execution is disabled:
 
 ```powershell
-npm.cmd run bump -- 1.2.0
+npm.cmd run bump -- 1.2.1
 npm.cmd run prerelease
 ```
 
@@ -160,7 +190,7 @@ node --test test/  # Run all tests
 
 See [TESTING.md](TESTING.md) for detailed test scenarios.
 The build runs `sync-version.mjs` before packaging, keeping `package.json` and
-`manifest.json` and `package-lock.json` on the same version. The current release is **1.2.0**. See
+`manifest.json` and `package-lock.json` on the same version. The current release is **1.2.1**. See
 [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Rules

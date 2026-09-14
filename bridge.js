@@ -1,14 +1,25 @@
 (() => {
-  const { firstMatch } = window.ApiMockRules;
+  const { firstMatch, normalizeHosts } = window.ApiMockRules;
+  let watchedHosts = new Set();
+  const pageIsWatched = () => {
+    try { const url = new URL(location.href); return ['http:', 'https:'].includes(url.protocol) && watchedHosts.has(url.host); } catch { return false; }
+  };
   const sendConfig = () => {
-    chrome.storage.local.get({ enabled: false, rules: [], flows: [], activeFlowId: null, recording: null, history: [] }, (config) => {
-      window.postMessage({ source: "local-api-mock", type: "config", config }, "*");
+    chrome.storage.local.get({ enabled: false, watchedHosts: [], rules: [], flows: [], activeFlowId: null, recording: null }, (saved) => {
+      config = saved;
+      watchedHosts = new Set(normalizeHosts(saved.watchedHosts));
+      window.postMessage({ source: "local-api-mock", type: "config", config: saved }, "*");
+      observer.disconnect();
+      if (config.enabled && pageIsWatched()) {
+        inspectStylesheets();
+        observer.observe(document, { childList: true, subtree: true });
+      }
     });
   };
 
   let config = { enabled: false, rules: [] };
   const handledLinks = new WeakSet();
-  const matchingStylesheetRule = (link) => config.enabled && link.relList.contains("stylesheet")
+  const matchingStylesheetRule = (link) => config.enabled && pageIsWatched() && link.relList.contains("stylesheet")
     ? firstMatch(config.rules, new URL(link.href, location.href).href, "GET") : null;
   const applyStylesheetRule = (link) => {
     if (handledLinks.has(link) || !link.href || link.href.startsWith("data:")) return;
@@ -33,21 +44,20 @@
     if (event.source !== window || event.data?.source !== "local-api-mock") return;
     if (event.data.type === "get-config") sendConfig();
     if (event.data.type === "recording-capture") {
+      if (!pageIsWatched()) return;
       chrome.runtime.sendMessage({ type: "recording-capture", flowId: event.data.flowId, record: event.data.record }, () => {
         if (chrome.runtime.lastError) console.warn("[FlowRecord] Capture could not be saved:", chrome.runtime.lastError.message);
       });
     }
-    if (event.data.type === "config") {
-      config = event.data.config;
-      inspectStylesheets();
-    }
   });
-  chrome.storage.onChanged.addListener(sendConfig);
-  sendConfig();
-  new MutationObserver((mutations) => mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
+  const observer = new MutationObserver((mutations) => mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
     if (node.nodeType === Node.ELEMENT_NODE) {
       if (node.matches("link[rel~='stylesheet']")) applyStylesheetRule(node);
       inspectStylesheets(node);
     }
-  }))).observe(document.documentElement, { childList: true, subtree: true });
+  })));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && ['enabled', 'watchedHosts', 'rules', 'flows', 'activeFlowId', 'recording'].some(key => key in changes)) sendConfig();
+  });
+  sendConfig();
 })();

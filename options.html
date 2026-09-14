@@ -45,6 +45,17 @@
     </header>
 
     <main class="app-main">
+      <details class="watched-hosts" open>
+        <summary>Watched Domains <span id="watched-count">0</span></summary>
+        <p>Only pages/apps on these exact hosts can use mocks or recording, including calls to other API domains. Include the port for local apps. An empty list leaves all requests alone.</p>
+        <form id="watched-form">
+          <label for="watched-input">Host or URL</label>
+          <input id="watched-input" placeholder="api.example.com or localhost:3000" required autocomplete="off">
+          <button type="submit">Add</button>
+        </form>
+        <p id="watched-error" role="alert"></p>
+        <ul id="watched-list"></ul>
+      </details>
       <div class="rules-container">
         <div class="rules-header">
           <h2 class="rules-header-title">My Mocks</h2>
@@ -72,6 +83,8 @@
     </footer>
   </div>
 
+  <script src="rules.js"></script>
+  <script src="watched-hosts.js"></script>
   <script src="options-utils.js"></script>
   <script src="options.js"></script>
 </body>

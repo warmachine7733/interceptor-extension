@@ -35,7 +35,7 @@ try {
   for (const enabled of [false, true]) for (const active of [false, true]) {
     const id = `${enabled}-${active}`;
     const recording = active ? { active, name: 'Customer journey', flowId: id, monitorScope: { type: 'site', origin }, captured: [] } : null;
-    await worker.evaluate(config => chrome.storage.local.set(config), { enabled, recording, rules: [rule], flows: [flow] });
+    await worker.evaluate(config => chrome.storage.local.set(config), { enabled, watchedHosts: [new URL(api).host, new URL(origin).host], recording, rules: [rule], flows: [flow] });
     await app.waitForFunction(({ enabled, active, id }) => window.__polishConfig?.enabled === enabled && (active ? window.__polishConfig?.recording?.flowId === id : window.__polishConfig?.recording === null), { enabled, active, id });
     assert.equal(await app.locator('#local-api-mock-rec-indicator').count(), active ? 1 : 0);
     const before = network;

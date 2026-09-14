@@ -1,4 +1,14 @@
 (() => {
+  const normalizeHost = (value) => {
+    if (typeof value !== 'string' || !value.trim() || /[\s*]/.test(value.trim())) return null;
+    try {
+      const input = value.trim();
+      const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(input) ? input : `http://${input}`);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !url.hostname) return null;
+      return url.host.toLowerCase();
+    } catch { return null; }
+  };
+  const normalizeHosts = values => [...new Set((Array.isArray(values) ? values : []).map(normalizeHost).filter(Boolean))];
   const normalizeMethod = (method) => String(method || "*").trim().toUpperCase();
   const normalizeUrl = (url) => String(url ?? "").trim().replace(/%2C/gi, ",");
 
@@ -101,5 +111,5 @@
     try { return JSON.parse(headers); } catch { return {}; }
   };
 
-  window.ApiMockRules = { firstMatch, firstFlowMatch, flowStepMatches, parseHeaders, patternToRegex, resetFlowReplayState, scopeMatches };
+  window.ApiMockRules = { firstMatch, firstFlowMatch, flowStepMatches, parseHeaders, patternToRegex, resetFlowReplayState, scopeMatches, normalizeHost, normalizeHosts };
 })();

@@ -31,6 +31,9 @@ try {
   const options = await context.newPage();
   options.on('pageerror', error => errors.push(error.message));
   await options.goto(`chrome-extension://${extensionId}/options.html#/flows`);
+  await options.locator('#watched-input').fill(origin);
+  await options.locator('#watched-form button').click();
+  await options.locator('#watched-list code').waitFor();
   const storage = () => options.evaluate(() => chrome.storage.local.get(null));
   const count = async n => {
     await options.waitForFunction(n => document.querySelector('.recording-banner')?.textContent.includes(`${n} request`), n);

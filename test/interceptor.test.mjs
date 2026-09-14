@@ -10,7 +10,41 @@ const RULE = {
   response: { enabled: true, status: 200, statusText: "OK", headers: '{"content-type":"application/json"}', body: '{"mocked":true}', delayMs: 0 }
 };
 
+test('disabled extension passes fetch through without constructing or reading a Request', async () => {
+  const { sandbox, calls } = buildPageContext({ enabled: false, rules: [] });
+  sandbox.Request = class { constructor() { throw new Error('Request must not be inspected'); } };
+  assert.equal(await sandbox.fetch('/api/v2/sync/maindata'), 'NATIVE');
+  assert.equal(calls.nativeFetch.length, 1);
+});
+
+test('recording on another site leaves disabled fetch completely untouched', async () => {
+  const { sandbox, calls } = buildPageContext({ enabled: false, recording: { active: true, monitorScope: { type: 'site', origin: 'https://other.example' } } });
+  sandbox.Request = class { constructor() { throw new Error('Unrelated page must not be inspected'); } };
+  assert.equal(await sandbox.fetch('/api/v2/app/version'), 'NATIVE');
+  assert.equal(calls.storageSets.length, 0);
+});
+
+for (const responseType of ['json', 'arraybuffer', 'blob']) {
+  test(`recording native ${responseType} XHR does not access the throwing responseText getter`, async () => {
+    const { sandbox, calls } = buildPageContext({ enabled: false, recording: { active: true, flowId: 'typed', captured: [], monitorScope: { type: 'global' } } });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const xhr = new sandbox.XMLHttpRequest();
+    xhr.open('GET', 'https://api.example.com/sync');
+    xhr.responseType = responseType;
+    xhr.response = { connected: true };
+    xhr.status = 200;
+    Object.defineProperty(xhr, 'responseText', { get() { throw new Error('InvalidStateError'); } });
+    xhr.send();
+    assert.doesNotThrow(() => xhr.dispatchEvent(new sandbox.Event('loadend')));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(calls.xhrSent, true);
+    assert.equal(calls.storageSets.at(-1).recording.captured.length, 1);
+  });
+}
+
 function buildPageContext(config, nativeFetchResult = "NATIVE", locationOverrides = {}) {
+  // Existing interception scenarios explicitly opt in to their fixture API hosts.
+  config = { watchedHosts: [new URL(locationOverrides.href || locationOverrides.origin || 'https://app.example.com').host], ...config };
   const listeners = {};
   const calls = { nativeFetch: [] };
 
@@ -41,7 +75,7 @@ function buildPageContext(config, nativeFetchResult = "NATIVE", locationOverride
     console, setTimeout, URL, RegExp, JSON, Object, Number, String, Promise, Error, WeakMap, Set, Map, Array,
     Request: FakeRequest, Response: FakeResponse, Headers: FakeHeaders,
     Event: class { constructor(type) { this.type = type; } },
-    location: { href: "https://app.example.com/", origin: "https://app.example.com", pathname: "/", ...locationOverrides },
+    location: { href: "https://app.example.com/", origin: "https://app.example.com", pathname: "/", ...locationOverrides, href: locationOverrides.href || `${locationOverrides.origin || 'https://app.example.com'}${locationOverrides.pathname || '/'}` },
     crypto: { randomUUID: () => `id-${Math.random().toString(36).slice(2)}` },
   };
   sandbox.window = sandbox;
@@ -61,7 +95,7 @@ function buildPageContext(config, nativeFetchResult = "NATIVE", locationOverride
     action: { onClicked: { addListener() {} } },
     tabs: { onActivated: { addListener() {} }, onUpdated: { addListener() {} } },
     runtime: { onInstalled: { addListener() {} }, onMessage: { addListener(fn) { receiveMessage = fn; } },
-      sendMessage(message, callback) { receiveMessage(message, { tab: { id: 1 } }, callback); } },
+      sendMessage(message, callback) { receiveMessage(message, { tab: { id: 1 }, url: sandbox.location.href }, callback); } },
     storage: {
       onChanged: { addListener(fn) { storageListeners.push(fn); } },
       local: {
@@ -83,13 +117,13 @@ function buildPageContext(config, nativeFetchResult = "NATIVE", locationOverride
     bridgeListeners.forEach(fn => fn({ source: bridgeWindow, data }));
   });
   const bridgeWindow = {
-    ApiMockRules: { firstMatch() {} }, postMessage: sandbox.postMessage,
+    ApiMockRules: { firstMatch() {}, normalizeHosts: values => values || [] }, postMessage: sandbox.postMessage,
     addEventListener(type, fn) { if (type === 'message') bridgeListeners.push(fn); }
   };
   vm.runInNewContext(fs.readFileSync(new URL('../bridge.js', import.meta.url), 'utf8'), {
-    window: bridgeWindow, chrome, console, URL,
+    window: bridgeWindow, chrome, console, URL, location: sandbox.location,
     document: { querySelectorAll: () => [], documentElement: {} },
-    MutationObserver: class { observe() {} }
+    MutationObserver: class { observe() {} disconnect() {} }
   });
   // No extension APIs in MAIN world: exercise the actual bridge and background writer.
   sandbox.__pushConfig = (nextConfig) => {

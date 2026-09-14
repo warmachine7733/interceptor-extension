@@ -33,10 +33,13 @@ try {
     if (event.source === window && event.data?.source === 'local-api-mock' && event.data.type === 'config') window.__draftTestConfig = event.data.config;
   }));
   await app.goto(origin);
-  await worker.evaluate(flow => chrome.storage.local.set({ enabled: true, flows: [flow], activeFlowId: flow.id, rules: [] }), flow);
+  await worker.evaluate(flow => chrome.storage.local.set({ enabled: true, watchedHosts: [new URL(flow.steps[0].matcher.urlPattern).host], flows: [flow], activeFlowId: flow.id, rules: [] }), flow);
   const options = await context.newPage();
   options.on('pageerror', error => errors.push(error.message));
   await options.goto(`chrome-extension://${new URL(worker.url()).host}/options.html#/flows/saved-flow`);
+  await options.locator('#watched-input').fill(origin);
+  await options.locator('#watched-form button').click();
+  await app.waitForFunction(host => window.__draftTestConfig?.watchedHosts?.includes(host), new URL(origin).host);
   if (!await options.locator('#enabled').isChecked()) {
     await options.locator('label.switch').click();
   }

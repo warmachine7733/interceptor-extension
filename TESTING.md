@@ -1,5 +1,28 @@
 # Extension Testing Guide
 
+## Watched Domains regressions
+
+Before testing mocks or recording, explicitly add the originating page/application host in
+**Watched Domains**. Missing/empty watchlists opt out every host, including on
+upgrade. Existing mocks and flows are preserved.
+
+`npm test` includes the exact-host pass-through matrix in
+`test/watchlist.test.mjs`: empty/missing lists, unrelated hosts, private IPs,
+port/subdomain mismatches, all five HTTP methods, disabled mocking, and recording
+that cannot bypass the watchlist. It verifies original fetch promises/arguments,
+XHR arguments, CSRF headers, no matching, and no capture listeners.
+
+With Playwright and Chromium installed, run `node test/watchlist-browser.mjs`.
+Like the other browser checks it accepts `PLAYWRIGHT_MODULE` and
+`PLAYWRIGHT_BROWSERS_PATH`. It routes a fixture at the qBittorrent URL without
+contacting the real LAN application, checks real fetch/XHR behavior, then tests
+Add/Remove, normalization, duplicates, persistence, and opt-in mocking. It also checks cross-origin APIs from watched/unwatched tabs
+and iframe isolation in both directions.
+
+An explicit recording session can capture watched requests while the mocking
+toggle is inactive. Neither recording nor global scope grants access to unwatched
+pages. The recording indicator appears only on watched application hosts.
+
 ## Quick Start
 1. Open `chrome://extensions/` and enable **Developer mode** (top right)
 2. Click **Load unpacked** and select this directory
@@ -174,9 +197,9 @@ xhr.send();
 
 ## Known Limitations
 - Mock responses don't simulate partial loading states (readystatechange at 1, 2, 3)
-- No network inspector or traffic recording
+- No full network inspector; flow recording supports watched fetch/XHR requests
 - No support for custom conditions beyond URL pattern and method
-- No import/export of rules (manual JSON edit of storage if needed)
+- Import/export covers manual mock rules
 
 ## Debugging
 1. Open DevTools and check the console for errors

@@ -1225,6 +1225,19 @@ body.view-flows .app-main { max-width: 1440px; }
   .flow-editor-layout { grid-template-columns: 250px minmax(0, 1fr); }
   .flow-step-inspector { padding: 20px; }
 }
+
+.watched-hosts { margin-bottom: 18px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.watched-hosts summary { cursor: pointer; font-weight: 650; }
+#watched-count { margin-left: 8px; color: var(--muted); }
+.watched-hosts p { color: var(--muted); font-size: 12px; margin: 10px 0; }
+#watched-form { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+#watched-input { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--canvas); color: var(--ink); }
+.watched-hosts button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--ink); }
+#watched-list { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 12px 0 0; }
+#watched-list li { display: flex; align-items: center; gap: 10px; padding: 4px 8px; background: var(--canvas); border-radius: 6px; max-width: 100%; }
+#watched-list code { overflow-wrap: anywhere; }
+#watched-error:empty { display: none; }
+#watched-error { color: #dc2626; }
 @media (max-width: 650px) {
   .flow-editor-layout { grid-template-columns: 1fr; }
   .flow-step-panel { border-right: 0; border-bottom: 1px solid var(--line); max-height: 290px; overflow: auto; flex-wrap: nowrap; }

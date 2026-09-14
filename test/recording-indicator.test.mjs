@@ -29,11 +29,24 @@ function setup() {
   const win = vm.runInContext('window', sandbox);
   return {
     sandbox, get: () => mounted,
-    send(recording, enabled = false) { listeners.message.forEach(fn => fn({ source: win, data: { source: 'local-api-mock', type: 'config', config: { recording, enabled } } })); },
+    send(recording, enabled = false, watchedHosts = ['app.example.com']) { listeners.message.forEach(fn => fn({ source: win, data: { source: 'local-api-mock', type: 'config', config: { recording, enabled, watchedHosts } } })); },
     pop(pathname) { location.pathname = pathname; listeners.popstate.forEach(fn => fn()); }
   };
 }
 const recording = (monitorScope) => ({ active: true, name: 'Customer journey', captured: [], monitorScope });
+test('unwatched pages keep native history and receive no recording UI', () => {
+  const ctx = setup();
+  const push = ctx.sandbox.history.pushState;
+  const replace = ctx.sandbox.history.replaceState;
+  ctx.send(recording({ type: 'global' }), true, []);
+  assert.equal(ctx.get(), null);
+  assert.equal(ctx.sandbox.history.pushState, push);
+  assert.equal(ctx.sandbox.history.replaceState, replace);
+  ctx.send(recording({ type: 'global' }));
+  assert.notEqual(ctx.sandbox.history.pushState, push);
+  ctx.send(null);
+  assert.equal(ctx.sandbox.history.pushState, push);
+});
 test('late recording config shows an isolated REC indicator with mocking off', () => {
   const ctx = setup(); assert.equal(ctx.get(), null);
   ctx.send(recording({ type: 'site', origin: 'https://app.example.com' }), false);
