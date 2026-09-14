@@ -298,6 +298,17 @@
     return JSON.stringify(parsed, null, indent);
   };
 
+  // Generic scope normalizer reused by the Record Flow monitor-target UI (recording.monitorScope).
+  // Missing/invalid scope always normalizes to "global". Manual mocks never use this -
+  // My Mocks stay independent of page/site scope entirely.
+  const normalizeScope = (scope) => {
+    const type = ["site", "page"].includes(scope?.type) ? scope.type : "global";
+    if (type === "global") return { type: "global" };
+    const normalized = { type, origin: String(scope?.origin || "").trim() };
+    if (type === "page") normalized.pathname = String(scope?.pathname || "").trim();
+    return normalized;
+  };
+
   const normalizeRule = (rule) => {
     const normalized = JSON.parse(JSON.stringify(rule));
     if (normalized.match) {
@@ -308,6 +319,9 @@
       if (typeof normalized.request.url === "string") normalized.request.url = normalized.request.url.trim();
       if (typeof normalized.request.method === "string") normalized.request.method = normalized.request.method.trim();
     }
+    // My Mocks are never page/site scoped - drop any leftover scope field so it can never
+    // influence matching (also cleans up rules saved by an earlier, reverted iteration).
+    delete normalized.scope;
     if (!Array.isArray(normalized.responses)) normalized.responses = normalized.response ? [{ ...normalized.response }] : makeRule().responses;
     if (!normalized.responses.length) normalized.responses = makeRule().responses;
     delete normalized.response;
@@ -321,5 +335,5 @@
     return normalized;
   };
 
-  window.ApiMockOptionsUtils = { nameFromUrl, makeRule, esc, methodClass, pathPreview, writePath, parsePastedJson, formatJson, normalizeRule };
+  window.ApiMockOptionsUtils = { nameFromUrl, makeRule, esc, methodClass, pathPreview, writePath, parsePastedJson, formatJson, normalizeRule, normalizeScope };
 })();

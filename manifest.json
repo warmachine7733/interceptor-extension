@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local API Mock",
-  "version": "1.1.7",
+  "version": "1.2.0",
   "description": "Locally modify API requests and mock API responses for development.",
   "permissions": ["storage"],
   "host_permissions": ["http://*/*", "https://*/*", "file://*/*"],
@@ -25,13 +25,13 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*", "file://*/*"],
-      "js": ["rules.js", "bridge.js"],
+      "js": ["rules-isolated.js", "bridge.js"],
       "run_at": "document_start",
       "all_frames": true
     },
     {
       "matches": ["http://*/*", "https://*/*", "file://*/*"],
-      "js": ["rules.js", "page-interceptor.js"],
+      "js": ["rules.js", "page-interceptor.js", "recording-indicator.js"],
       "run_at": "document_start",
       "all_frames": true,
       "world": "MAIN"

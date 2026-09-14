@@ -9,6 +9,14 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
   throw new Error(`Invalid package version: ${version}`);
 }
 
+const lockPath = new URL('./package-lock.json', import.meta.url);
+const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+if (lock.version !== version || lock.packages[''].version !== version) {
+  lock.version = version;
+  lock.packages[''].version = version;
+  fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+}
+
 const manifest = fs.readFileSync(manifestPath, "utf8");
 if (!/("version"\s*:\s*)"[^"]+"/.test(manifest)) {
   throw new Error("Manifest version field not found");

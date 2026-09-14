@@ -29,9 +29,11 @@ npm run build        # Build extension for distribution
 - Bump `package.json` and run `npm run prebuild` to sync `manifest.json`
 - Run `npm test` and `npm run build`
 
-Use `npm run bump -- 1.1.6` for the next release. It updates `package.json`,
-syncs `manifest.json`, and adds recent commit summaries to `CHANGELOG.md`.
+Use `npm run bump -- 1.2.0` to prepare this release. It updates `package.json`,
+syncs `manifest.json` and `package-lock.json`, and adds recent commit summaries to `CHANGELOG.md`.
 You can provide an optional summary after the version when needed.
+Run `npm run prerelease` to test, build, and verify every ZIP asset. On Windows
+PowerShell use `npm.cmd` in place of `npm` if script execution is disabled.
 
 ## Code structure
 

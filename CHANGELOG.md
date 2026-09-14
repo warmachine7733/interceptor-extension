@@ -1,5 +1,12 @@
 # Release Log
 
+## 1.2.0
+- Added flow recording and sequential API response replay with domain and page capture scopes.
+- Added a recording indicator with captured request counts.
+- Added flow step editing with explicit save, discard, and unsaved-change navigation guards.
+- Refined the Flows UI, dark mode, and responsive layouts.
+- Expanded automated and Chromium browser coverage for recording and flow editing.
+
 ## 1.1.7
 - Revamped options UI with modern developer tool aesthetic (frosted glass header, glowing accents, refined method badges).
 - Added pre-release verification script (`npm run prerelease`) checking version sync, tests, build artifacts, and bundle contents.

@@ -3,6 +3,8 @@
 A minimal Chromium Manifest V3 extension for development-time API mocking. It intercepts `fetch` and `XMLHttpRequest`, supports request URL/method/header/body overrides, and returns configured local mock responses.
 
 **Features:**
+- Flow recording for fetch/XHR, scoped to a domain, page, or all sites.
+- Sequential flow replay and step editing with explicit save/discard controls.
 - ✅ Intercepts fetch() and XMLHttpRequest
 - ✅ Mock responses with custom status, headers, body, and delay
 - ✅ Multiple response variants per mock with easy tab switching
@@ -22,7 +24,7 @@ A minimal Chromium Manifest V3 extension for development-time API mocking. It in
 **Not included:**
 - ❌ Requestly UI, dashboard, or cloud services
 - ❌ Accounts, billing, or telemetry
-- ❌ Network inspector or traffic recording
+- ❌ Full network inspector
 - ❌ Redirect, script injection, or file mapping
 
 ## Install locally
@@ -136,6 +138,17 @@ testing a published rule. Individual rules must also be enabled.
 
 ## Building
 
+On Windows PowerShell, use `npm.cmd` if script execution is disabled:
+
+```powershell
+npm.cmd run bump -- 1.2.0
+npm.cmd run prerelease
+```
+
+The release check runs automated tests, builds the ZIP, and verifies every
+packaged file against its source using SHA-256. Windows uses built-in PowerShell
+archive tools; macOS/Linux require `zip` and `unzip`. No build packages are fetched.
+
 ```bash
 npm install  # Install dev dependencies
 npm run build  # Create dist/local-api-mock.zip
@@ -145,9 +158,9 @@ node --test test/  # Run all tests
 
 ## Testing
 
-See [TESTING.md](TESTING.md) for detailed test scenarios and [FIXES.md](FIXES.md) for bug fixes applied.
+See [TESTING.md](TESTING.md) for detailed test scenarios.
 The build runs `sync-version.mjs` before packaging, keeping `package.json` and
-`manifest.json` on the same version. The current release is **1.1.5**. See
+`manifest.json` and `package-lock.json` on the same version. The current release is **1.2.0**. See
 [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Rules

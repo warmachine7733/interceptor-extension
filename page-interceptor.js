@@ -2,61 +2,129 @@
   if (window.__LOCAL_API_MOCK_INSTALLED__) return;
   window.__LOCAL_API_MOCK_INSTALLED__ = true;
 
-  let config = { enabled: false, rules: [] };
-  const rules = window.ApiMockRules || (() => {
-    const normalizeMethod = (method) => String(method || "*").trim().toUpperCase();
-    const normalizeUrl = (url) => String(url ?? "").trim().replace(/%2C/gi, ",");
-    const patternToRegex = (pattern) => {
-      const value = normalizeUrl(pattern || "*");
-      const hasQuery = value.includes("?");
-      const escaped = value
-        .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-        .replace(/\*/g, hasQuery ? ".*" : "[^?]*");
-      return new RegExp(`^${escaped}$`);
-    };
-    const firstMatch = (rules, url, method) => (rules || []).find((rule) => {
-      if (!rule?.enabled) return false;
-      const pattern = String(rule.match?.urlPattern || "*").trim();
-      if (!patternToRegex(pattern).test(normalizeUrl(url))) return false;
-      const expectedMethod = normalizeMethod(rule.match?.method);
-      return expectedMethod === "*" || expectedMethod === normalizeMethod(method);
-    }) || null;
-    const parseHeaders = (headers) => {
-      if (!headers) return {};
-      if (typeof headers === "object") return headers;
-      try { return JSON.parse(headers); } catch { return {}; }
-    };
-    return { firstMatch, parseHeaders };
-  })();
-  const { firstMatch, parseHeaders } = rules;
+  let config = { enabled: false, rules: [], flows: [], activeFlowId: null, recording: null };
+  // rules.js is always loaded before this script (see manifest.json content_scripts
+  // ordering, both worlds), so ApiMockRules is the single canonical matcher implementation.
+  const { firstMatch, firstFlowMatch, parseHeaders, resetFlowReplayState, scopeMatches } = window.ApiMockRules;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Number(ms) || 0));
 
+  const shouldIgnoreRecordingUrl = (url) => {
+    if (!url || typeof url !== "string") return true;
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:", "file:"].includes(parsed.protocol)) return true;
+      if (/\.(?:png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|mp4|webm|mp3|wav|ogg|pdf|zip|gz)(?:[?#]|$)/i.test(parsed.pathname)) return true;
+      if (/\/\.(?:well-known|git|svn)|(?:^|\/)(?:favicon\.ico)$/.test(parsed.pathname)) return true;
+      if (parsed.hostname === "localhost" && /\/ws\//i.test(parsed.pathname)) return true;
+    } catch { return true; }
+    return false;
+  };
+
+  const sanitizeHeaders = (headers) => {
+    const result = {};
+    const source = parseHeaders(headers);
+    for (const [key, value] of Object.entries(source || {})) {
+      const normalizedKey = String(key).toLowerCase();
+      if (["authorization", "cookie", "set-cookie"].includes(normalizedKey)) continue;
+      if (value === undefined || value === null) continue;
+      result[key] = String(value);
+    }
+    return result;
+  };
+
+  const localLimit = (value, maxLength = 200000) => {
+    if (typeof value === "string") return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+    if (value === undefined || value === null) return value;
+    try {
+      const stringValue = JSON.stringify(value);
+      return stringValue.length > maxLength ? `${stringValue.slice(0, maxLength)}…` : stringValue;
+    } catch {
+      return String(value).slice(0, maxLength);
+    }
+  };
+
+  // Controls ONLY whether a request is added to an in-progress recording - it has no
+  // effect on manual mock matching or Flow replay. Missing monitorScope (older recording
+  // sessions) behaves as "global" (unrestricted), same as before this feature existed.
+  const shouldCaptureForRecording = (currentPage, recording) => {
+    if (!recording?.active) return false;
+    return scopeMatches(recording.monitorScope, currentPage);
+  };
+
+  const storageRecord = (record) => {
+    if (!config.recording?.active || !record) return;
+    const allowed = shouldCaptureForRecording(record.pageContext || null, config.recording);
+    if (!allowed) return;
+    window.postMessage({ source: "local-api-mock", type: "recording-capture", flowId: config.recording.flowId, record }, "*");
+  };
+
   window.addEventListener("message", (event) => {
-    if (event.source === window && event.data?.source === "local-api-mock" && event.data?.type === "config") config = event.data.config;
+    if (event.source !== window || event.data?.source !== "local-api-mock" || event.data?.type !== "config") return;
+    const nextConfig = event.data.config || {};
+    const previousFlowsById = new Map((config.flows || []).map((flow) => [flow.id, flow]));
+    const nextFlows = Array.isArray(nextConfig.flows) ? nextConfig.flows : [];
+    // A flow's replay progress must restart whenever its enabled state flips (covers
+    // "active flow changed", "flow disabled", and "flow re-enabled") or when it's
+    // deleted - otherwise a fresh replay run could silently resume from stale steps.
+    for (const flow of nextFlows) {
+      const previous = previousFlowsById.get(flow.id);
+      if (!previous || Boolean(previous.enabled) !== Boolean(flow.enabled)) resetFlowReplayState(flow.id);
+    }
+    for (const id of previousFlowsById.keys()) {
+      if (!nextFlows.some((flow) => flow.id === id)) resetFlowReplayState(id);
+    }
+    config = { ...config, ...nextConfig };
   });
   window.postMessage({ source: "local-api-mock", type: "get-config" }, "*");
 
-  const matchingRule = (url, method) => config.enabled ? firstMatch(config.rules, url, method) : null;
+  const flowMatch = (url, method, body, pageContext) => {
+    if (!config.enabled) return null;
+    const flow = firstFlowMatch(config.flows, url, method, body, pageContext);
+    if (!flow) return null;
+    const response = flow.response || {};
+    return {
+      id: flow.id,
+      name: flow.flowName || "Flow",
+      source: "flow",
+      flowId: flow.flowId,
+      match: { method: flow.matcher?.method || method, urlPattern: flow.matcher?.urlPattern || url },
+      request: flow.request || {},
+      response: { ...response, enabled: true },
+      responses: [{ ...response, enabled: true }],
+      defaultResponseIndex: 0,
+      enabled: true
+    };
+  };
+  // The current app route (not the API request URL) - read fresh on every call so SPA
+  // navigation (history.pushState/replaceState/popstate) is always reflected without
+  // needing dedicated navigation listeners. Used for Flow replay's optional per-step page
+  // guard and for the Record Flow capture filter - never for manual mock matching.
+  const currentPageContext = () => ({ origin: location.origin, pathname: location.pathname });
+  const matchingRule = (url, method, body) => {
+    if (!config.enabled) return null;
+    const rule = firstMatch(config.rules, url, method);
+    if (rule) return rule;
+    return flowMatch(url, method, body, currentPageContext());
+  };
   const responseForRule = (rule) => rule?.responses?.[Math.min(Math.max(Number(rule.defaultResponseIndex) || 0, 0), rule.responses.length - 1)] || rule?.response;
   const log = (method, url, rule) => {
-    if (rule) {
-      const response = responseForRule(rule);
-      const logRule = { ...rule, response: response ? { ...response } : response };
-      try {
-        if (typeof logRule.response?.body === "string") logRule.response.body = JSON.parse(logRule.response.body);
-      } catch { /* Keep non-JSON response bodies as strings. */ }
-      console.log(
-        `%c[API Mock]%c ${response?.enabled ? "mocked" : "rewriting"} %c${method}%c ${url}`,
-        "color:#22c55e;font-weight:bold", "color:inherit", "background:#334155;color:#fff;padding:0 4px;border-radius:3px", "color:inherit",
-        logRule
-      );
-    }
+    if (!rule) return;
+    const response = responseForRule(rule);
+    const logRule = { ...rule, response: response ? { ...response } : response, source: rule.source || "manual" };
+    try {
+      if (typeof logRule.response?.body === "string") logRule.response.body = JSON.parse(logRule.response.body);
+    } catch { /* Keep non-JSON response bodies as strings. */ }
+    console.log(
+      `%c[API Mock]%c ${rule.source === "flow" ? "flow replay" : response?.enabled ? "mocked" : "rewriting"} %c${method}%c ${url}`,
+      "color:#22c55e;font-weight:bold", "color:inherit", "background:#334155;color:#fff;padding:0 4px;border-radius:3px", "color:inherit",
+      logRule
+    );
   };
   const toastState = { container: null, lastShown: new Map() };
   const showRuleToast = (rule, url, method) => {
     try {
       if (typeof document === "undefined" || !document.documentElement) return;
-      const key = `${rule?.id || ""}|${method}|${url}`;
+      const key = `${rule?.id || rule?.flowId || ""}|${method}|${url}`;
       const now = Date.now();
       if (now - (toastState.lastShown.get(key) || 0) < 3000) return;
       toastState.lastShown.set(key, now);
@@ -69,7 +137,7 @@
       toast.style.cssText = "pointer-events:auto;cursor:pointer;background:#1e293b;color:#f8fafc;padding:10px 14px 6px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.35);font-size:13px;line-height:1.4;max-width:360px;border-left:3px solid #22c55e;opacity:0;transform:translateY(-8px);transition:opacity .2s ease,transform .2s ease;overflow:hidden;";
       const title = document.createElement("div");
       title.style.cssText = "font-weight:600;";
-      title.textContent = `⚡ ${rule?.response?.enabled ? "Mocked" : "Intercepted"}: ${rule?.name || "Unnamed rule"}`;
+      title.textContent = rule?.source === "flow" ? `⚡ Flow: ${rule.name || "Unnamed flow"}` : `⚡ ${rule?.response?.enabled ? "Mocked" : "Intercepted"}: ${rule?.name || "Unnamed rule"}`;
       const detail = document.createElement("div");
       detail.style.cssText = "opacity:.7;font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
       detail.textContent = `${method} ${url}`;
@@ -104,17 +172,72 @@
     return new Response([204, 205, 304].includes(status) ? null : (response.body ?? ""), { status, statusText: response.statusText || "", headers });
   };
 
+  const captureFetchRecord = async (request, response) => {
+    if (!config.recording?.active || !request || !response || shouldIgnoreRecordingUrl(request.url)) return;
+    const contentType = (response.headers && response.headers.get ? response.headers.get("content-type") : "") || "";
+    if (/\b(?:image|audio|video|font|octet-stream)\b/i.test(contentType) || /\.(?:png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|mp4|webm|mp3|wav|ogg)/i.test(request.url)) return;
+    const responseBody = await response.clone().text().catch(() => "");
+    const record = {
+      id: crypto.randomUUID(),
+      include: true,
+      method: request.method,
+      url: request.url,
+      pathname: new URL(request.url).pathname,
+      headers: sanitizeHeaders(request.headers),
+      body: localLimit(await request.clone().text().catch(() => undefined), 160000),
+      timestamp: Date.now(),
+      status: response.status,
+      responseHeaders: sanitizeHeaders(response.headers),
+      responseBody: localLimit(responseBody, 160000),
+      contentType,
+      delay: 0,
+      source: "recording"
+    };
+    storageRecord(record);
+  };
+
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const original = input instanceof Request ? input : new Request(input, init);
-    const rule = matchingRule(original.url, original.method);
-    log(original.method, original.url, rule);
-    if (!rule) return nativeFetch(input, init);
-    showRuleToast(rule, original.url, original.method);
-    const request = await applyRequestOverride(original, rule.request);
-    const response = responseForRule(rule);
-    if (response?.enabled) return mockResponse(response);
-    return nativeFetch(request);
+    const bodyForMatch = /^(GET|HEAD)$/.test(original.method) ? undefined : await original.clone().text().catch(() => undefined);
+    const rule = matchingRule(original.url, original.method, bodyForMatch);
+    const performFetch = async () => {
+      log(original.method, original.url, rule);
+      if (!rule) return nativeFetch(input, init);
+      showRuleToast(rule, original.url, original.method);
+      const request = await applyRequestOverride(original, rule.request);
+      const response = responseForRule(rule);
+      if (response?.enabled) return mockResponse(response);
+      return nativeFetch(request);
+    };
+    if (config.recording?.active && !shouldIgnoreRecordingUrl(original.url)) {
+      const requestRecord = {
+        id: crypto.randomUUID(),
+        method: original.method,
+        url: original.url,
+        pathname: new URL(original.url).pathname,
+        headers: sanitizeHeaders(original.headers),
+        body: localLimit(bodyForMatch, 160000),
+        timestamp: Date.now(),
+        include: true,
+        source: "recording",
+        pageContext: currentPageContext()
+      };
+      const response = await performFetch();
+      const contentType = response.headers?.get ? response.headers.get("content-type") : "";
+      const responseBody = await response.clone().text().catch(() => "");
+      const finalRecord = {
+        ...requestRecord,
+        status: response.status,
+        responseHeaders: sanitizeHeaders(response.headers),
+        responseBody: localLimit(responseBody, 160000),
+        contentType,
+        delay: 0
+      };
+      storageRecord(finalRecord);
+      return response;
+    }
+    return performFetch();
   };
 
   const nativeOpen = XMLHttpRequest.prototype.open;
@@ -123,12 +246,15 @@
   const meta = new WeakMap();
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     const absoluteUrl = new URL(url, location.href).href;
-    const rule = matchingRule(absoluteUrl, method);
-    const override = rule?.request || {};
+    // Only manual rules can rewrite the request at open() time - they never depend on
+    // the body. Flow matching (which can depend on the body via matchBody, and must
+    // advance replay counters exactly once) is deferred to send(), once body is known.
+    const manualRule = config.enabled ? firstMatch(config.rules, absoluteUrl, method) : null;
+    const override = manualRule?.request || {};
     const overrideUrl = override.url ? String(override.url).trim() : "";
     const overrideMethod = override.method ? String(override.method).trim().toUpperCase() : "";
     const finalMethod = overrideMethod || method.toUpperCase();
-    meta.set(this, { rule, method: finalMethod, url: overrideUrl || absoluteUrl, override });
+    meta.set(this, { manualRule, method: finalMethod, url: overrideUrl || absoluteUrl, override });
     return nativeOpen.call(this, finalMethod, overrideUrl || url, ...rest);
   };
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
@@ -145,13 +271,42 @@
   };
   XMLHttpRequest.prototype.send = function (body) {
     const details = meta.get(this);
-    if (details) log(details.method, details.url, details.rule || null);
-    if (!details?.rule) return nativeSend.call(this, body);
-    showRuleToast(details.rule, details.url, details.method);
-    for (const [name, value] of Object.entries(parseHeaders(details.override.headers))) {
+    if (config.recording?.active && !shouldIgnoreRecordingUrl(details?.url || "")) {
+      const record = {
+        id: crypto.randomUUID(),
+        include: true,
+        method: details?.method || "GET",
+        url: details?.url || location.href,
+        pathname: new URL(details?.url || location.href).pathname,
+        headers: sanitizeHeaders({}),
+        body: localLimit(typeof body === "string" ? body : "", 160000),
+        timestamp: Date.now(),
+        source: "recording",
+        pageContext: currentPageContext()
+      };
+      let captured = false;
+      const capture = () => {
+        if (captured) return;
+        captured = true;
+        const contentType = this.getResponseHeader ? this.getResponseHeader("content-type") || "" : "";
+        const responseText = typeof this.responseText === "string" ? this.responseText : "";
+        storageRecord({ ...record, status: Number(this.status) || 0, responseHeaders: sanitizeHeaders(this.getAllResponseHeaders ? this.getAllResponseHeaders() : {}), responseBody: localLimit(responseText, 160000), contentType, delay: 0 });
+      };
+      this.addEventListener("loadend", capture);
+      this.addEventListener("error", capture);
+    }
+    // Resolve the final rule here (not in open()) so body-dependent flow matching -
+    // and its once-per-request replay counter increment - happens exactly once, using
+    // the real outgoing body instead of whatever was known at open() time.
+    const bodyForMatch = typeof body === "string" ? body : undefined;
+    const rule = details?.manualRule || matchingRule(details?.url, details?.method, bodyForMatch);
+    if (details) log(details.method, details.url, rule || null);
+    if (!rule) return nativeSend.call(this, body);
+    showRuleToast(rule, details.url, details.method);
+    for (const [name, value] of Object.entries(parseHeaders(rule.request?.headers))) {
       if (value !== null && value !== "" && !details.overriddenHeaders?.has(name.toLowerCase())) nativeSetRequestHeader.call(this, name, String(value));
     }
-    const response = responseForRule(details.rule);
+    const response = responseForRule(rule);
     if (response?.enabled) {
       const status = Number(response.status) || 200;
       const text = response.body ?? "";
@@ -179,6 +334,7 @@
       }, delayMs);
       return;
     }
-    return nativeSend.call(this, details.override.body !== undefined ? details.override.body : body);
+    return nativeSend.call(this, rule.request?.body !== undefined ? rule.request.body : body);
   };
 })();
+

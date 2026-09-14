@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
+import { runNpm } from "./release-tools.mjs";
 
 const nextVersion = process.argv[2];
 const extraSummary = process.argv.slice(3).join(" ").trim();
@@ -17,7 +18,7 @@ const changelog = fs.readFileSync(changelogPath, "utf8");
 const hasChangelogEntry = new RegExp(`^## ${nextVersion.replaceAll(".", "\\.")}\\s*$`, "m").test(changelog);
 
 if (nextVersion === currentVersion && hasChangelogEntry) {
-  execFileSync("npm", ["run", "prebuild"], { stdio: "inherit" });
+  runNpm(["run", "prebuild"]);
   console.log(`${nextVersion} is already prepared; package.json, manifest.json, and CHANGELOG.md are up to date.`);
   process.exit(0);
 }
@@ -46,5 +47,5 @@ if (hasChangelogEntry) {
 packageData.version = nextVersion;
 fs.writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
 fs.writeFileSync(changelogPath, changelog.replace(/^# Release Log\s*\n\s*/, (heading) => `${heading}\n${entry}`));
-execFileSync("npm", ["run", "prebuild"], { stdio: "inherit" });
+runNpm(["run", "prebuild"]);
 console.log(`Bumped ${currentVersion} to ${nextVersion} and updated CHANGELOG.md.`);

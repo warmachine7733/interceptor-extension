@@ -1,7 +1,7 @@
 (() => {
   const { firstMatch } = window.ApiMockRules;
   const sendConfig = () => {
-    chrome.storage.local.get({ enabled: false, rules: [] }, (config) => {
+    chrome.storage.local.get({ enabled: false, rules: [], flows: [], activeFlowId: null, recording: null, history: [] }, (config) => {
       window.postMessage({ source: "local-api-mock", type: "config", config }, "*");
     });
   };
@@ -32,6 +32,11 @@
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.data?.source !== "local-api-mock") return;
     if (event.data.type === "get-config") sendConfig();
+    if (event.data.type === "recording-capture") {
+      chrome.runtime.sendMessage({ type: "recording-capture", flowId: event.data.flowId, record: event.data.record }, () => {
+        if (chrome.runtime.lastError) console.warn("[FlowRecord] Capture could not be saved:", chrome.runtime.lastError.message);
+      });
+    }
     if (event.data.type === "config") {
       config = event.data.config;
       inspectStylesheets();

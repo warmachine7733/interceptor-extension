@@ -1,75 +1,52 @@
-import fs from "node:fs";
-import { execFileSync } from "node:child_process";
+﻿import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { root, runNpm, powershell, releaseFiles } from './release-tools.mjs';
 
-console.log("Running pre-release checks...\n");
-
-// 1. Check version sync
-const packageData = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8"));
-const manifestData = JSON.parse(fs.readFileSync(new URL("./manifest.json", import.meta.url), "utf8"));
-const changelog = fs.readFileSync(new URL("./CHANGELOG.md", import.meta.url), "utf8");
-
-const version = packageData.version;
-console.log(`Checking version: ${version}`);
-
-if (manifestData.version !== version) {
-  throw new Error(`Version mismatch: package.json is ${version} but manifest.json is ${manifestData.version}`);
+const readJson = name => JSON.parse(fs.readFileSync(path.join(root, name), 'utf8'));
+const version = readJson('package.json').version;
+const lock = readJson('package-lock.json');
+console.log(`Checking release v${version}...`);
+if ([readJson('manifest.json').version, lock.version, lock.packages[''].version].some(value => value !== version)) {
+  throw new Error('Package, manifest, and lockfile versions must match.');
 }
-
-const changelogPattern = new RegExp(`^## ${version.replaceAll(".", "\\.")}\\s*$`, "m");
-if (!changelogPattern.test(changelog)) {
-  throw new Error(`CHANGELOG.md is missing an entry for version ${version}`);
+if (!new RegExp(`^## ${version.replaceAll('.', '\\.')}\\s*$`, 'm').test(fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'))) {
+  throw new Error(`CHANGELOG.md is missing version ${version}`);
 }
-console.log("✓ Versions in package.json, manifest.json, and CHANGELOG.md are synchronized.");
-
-// 2. Run test suite
-console.log("\nRunning test suite...");
-execFileSync("npm", ["test"], { stdio: "inherit" });
-console.log("✓ All tests passed.");
-
-// 3. Build bundle
-console.log("\nBuilding release bundle...");
-execFileSync("npm", ["run", "build"], { stdio: "inherit" });
-console.log("✓ Build completed.");
-
-// 4. Verify zip file contents
-const distZipPath = new URL("./dist/local-api-mock.zip", import.meta.url);
-if (!fs.existsSync(distZipPath)) {
-  throw new Error("dist/local-api-mock.zip was not created.");
+runNpm(['test']);
+runNpm(['run', 'build']);
+const zip = path.join(root, 'dist/local-api-mock.zip');
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+let entries;
+if (process.platform === 'win32') {
+  entries = JSON.parse(powershell(`
+    Add-Type -AssemblyName System.IO.Compression.FileSystem;
+    $archive = [System.IO.Compression.ZipFile]::OpenRead((Join-Path (Get-Location) 'dist/local-api-mock.zip'));
+    try {
+      $result = @($archive.Entries | Where-Object { $_.Name } | ForEach-Object {
+        $stream = $_.Open(); $sha = [System.Security.Cryptography.SHA256]::Create();
+        try { @{ name = $_.FullName.Replace('\\', '/'); hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() } }
+        finally { $stream.Dispose(); $sha.Dispose() }
+      });
+      ConvertTo-Json -InputObject $result -Compress;
+    } finally { $archive.Dispose() }
+  `));
+} else {
+  entries = execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).trim().split('\n').filter(name => !name.endsWith('/')).map(name => ({
+    name, hash: hash(execFileSync('unzip', ['-p', zip, name]))
+  }));
 }
-
-const requiredFiles = [
-  "manifest.json",
-  "background.js",
-  "bridge.js",
-  "rules.js",
-  "page-interceptor.js",
-  "options.html",
-  "options.css",
-  "options-utils.js",
-  "options.js",
-  "LICENSE",
-  "README.md",
-  "CHANGELOG.md"
-];
-
-const zipListing = execFileSync("unzip", ["-l", "dist/local-api-mock.zip"], { encoding: "utf8" });
-for (const file of requiredFiles) {
-  if (!zipListing.includes(file)) {
-    throw new Error(`Release bundle is missing required file: ${file}`);
+const expected = releaseFiles();
+if (entries.length !== expected.length || new Set(entries.map(entry => entry.name)).size !== expected.length) {
+  throw new Error('ZIP contains unexpected or duplicate files.');
+}
+for (const name of expected) {
+  if (entries.find(entry => entry.name === name)?.hash !== hash(fs.readFileSync(path.join(root, name)))) {
+    throw new Error(`ZIP asset is missing or differs from source: ${name}`);
   }
 }
-console.log("✓ Release zip verified with all required assets.");
-
-// 5. Check git status
-try {
-  const gitStatus = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim();
-  if (gitStatus) {
-    console.warn("\n⚠️  Warning: Git working directory has uncommitted changes:\n" + gitStatus);
-  } else {
-    console.log("✓ Git working tree is clean.");
-  }
-} catch {
-  // Git check is best-effort if git is not initialized
-}
-
-console.log(`\n🎉 Pre-release checks passed successfully for v${version}!`);
+console.log(`Verified all ${expected.length} ZIP assets against source, including manifest v${version}.`);
+const status = execFileSync('git', ['status', '--short'], { cwd: root, encoding: 'utf8' }).trim();
+if (status) console.warn(`Working tree changes:\n${status}`);
+console.log(`Pre-release checks passed for v${version}.`);
