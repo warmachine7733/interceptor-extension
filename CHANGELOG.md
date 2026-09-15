@@ -1,6 +1,11 @@
 # Release Log
 
 
+
+## 1.2.2
+- Made the header Active/Inactive switch the master control for every mock and Flow; disabling it always restores native requests without changing saved Flow activation.
+- Added Flow JSON import/export, including exporting all Flows or an individual Flow from its actions menu. Imported Flows start disabled to avoid unexpected interception.
+
 ## 1.2.1
 - Scope mocking and recording to explicitly watched application hosts
 - Added an empty-by-default Watched Domains list: exact originating page host opt-in gates mocks, flow replay, and recording before request processing.

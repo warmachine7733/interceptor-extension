@@ -191,6 +191,20 @@ test("fetch falls through when extension disabled", async () => {
   assert.equal(calls.nativeFetch.length, 1);
 });
 
+test("an enabled Flow falls through when the global extension switch is disabled", async () => {
+  const flow = {
+    id: "flow-global-off",
+    name: "Global gate",
+    enabled: true,
+    steps: [{ id: "step-1", enabled: true, matcher: { method: "GET", urlPattern: "https://api.example.com/flow-only" }, response: { status: 200, body: "flow response" } }]
+  };
+  const { sandbox, calls } = buildPageContext({ enabled: false, rules: [], flows: [flow] });
+  await new Promise((r) => setTimeout(r, 0));
+  const result = await sandbox.fetch("https://api.example.com/flow-only");
+  assert.equal(result, "NATIVE");
+  assert.equal(calls.nativeFetch.length, 1);
+});
+
 test("unchecked response passes through using request overrides", async () => {
   const rule = { ...RULE, request: { url: "https://api.example.com/rewritten", method: "POST", headers: "{}", body: '{"changed":true}' }, response: { ...RULE.response, enabled: false } };
   const { sandbox, calls } = buildPageContext({ enabled: true, rules: [rule] });

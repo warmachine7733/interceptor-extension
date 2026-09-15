@@ -187,6 +187,45 @@ function exportMocks() {
   link.click();
   URL.revokeObjectURL(link.href);
 }
+function downloadJson(payload, filename) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+function flowExportPayload(flows) {
+  return { version: 1, kind: "api-mock-flows", flows: flows.map((flow) => normalizeFlow(flow)) };
+}
+function exportFlows(flows = state.flows) {
+  if (!flows.length) { alert("There are no flows to export."); return; }
+  const exportName = flows.length === 1
+    ? `${(flows[0].name || "api-mock-flow").replace(/[\\/:*?\"<>|]+/g, "-").trim() || "api-mock-flow"}-flow.json`
+    : "api-mock-flows.json";
+  downloadJson(flowExportPayload(flows), exportName);
+}
+function importFlowsPayload(payload) {
+  if (payload?.version !== 1 || payload?.kind !== "api-mock-flows" || !Array.isArray(payload.flows) || payload.flows.some((flow) => !flow || typeof flow !== "object" || !Array.isArray(flow.steps))) throw new Error("Invalid flow export");
+  const existingIds = new Set(state.flows.map((flow) => flow.id));
+  const importedFlows = payload.flows.map((flow) => {
+    const copy = normalizeFlow(flow);
+    if (existingIds.has(copy.id)) copy.id = crypto.randomUUID();
+    existingIds.add(copy.id);
+    // Imported flows are deliberately inactive. This prevents an import from changing
+    // live requests until the user explicitly enables the desired flow.
+    copy.enabled = false;
+    return copy;
+  });
+  state.flows = [...state.flows, ...importedFlows];
+  persist();
+  render();
+  return importedFlows;
+}
+function importFlows(file) {
+  file.text().then((text) => importFlowsPayload(JSON.parse(text)))
+    .catch(() => alert("This file is not a valid flow export."))
+    .finally(() => { $("#import-flows-file").value = ""; });
+}
 function importMocks(file) {
   file.text().then((text) => {
     const payload = JSON.parse(text);
@@ -434,7 +473,6 @@ function toggleFlow(flowId) {
     return { ...current, enabled, updatedAt: Date.now() };
   });
   state.activeFlowId = nextActiveId || null;
-  state.enabled = Boolean(nextActiveId) || state.enabled;
   persist();
   render();
 }
@@ -579,12 +617,12 @@ function renderFlows() {
     }).join("");
     const preview = previewRows || `<div class="flow-step-more">No requests captured yet.</div>`;
     const more = remaining > 0 ? `<div class="flow-step-more">+${remaining} more</div>` : "";
-    return `<article class="flow-item ${enabled ? "flow-active" : ""}"><div class="flow-header"><div class="flow-name-wrap"><span class="flow-name">${esc(safeFlow.name || "Unnamed flow")}</span><span class="flow-status-badge ${enabled ? "on" : "off"}">${enabled ? "● Active" : "Disabled"}</span></div><div class="flow-actions"><button class="flow-action" data-flow-action="toggle" data-flow-id="${esc(safeFlow.id)}">${enabled ? "Disable" : "Enable"}</button><button class="flow-action flow-action-primary" data-flow-action="edit" data-flow-id="${esc(safeFlow.id)}">Edit Flow</button><details class="flow-menu"><summary class="flow-menu-trigger" aria-label="More actions">⋯</summary><div class="flow-menu-items"><button class="flow-menu-item" data-flow-action="duplicate" data-flow-id="${esc(safeFlow.id)}">Duplicate</button><button class="flow-menu-item danger" data-flow-action="delete" data-flow-id="${esc(safeFlow.id)}">Delete</button></div></details></div></div><div class="flow-meta">${origin ? `${esc(origin.replace(/^https?:\/\//, ""))} · ` : ""}${safeFlow.steps.length} step${safeFlow.steps.length === 1 ? "" : "s"} · ${new Date(safeFlow.updatedAt || safeFlow.createdAt || Date.now()).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div><div class="flow-summary">${preview}${more}</div></article>`;
+    return `<article class="flow-item ${enabled ? "flow-active" : ""}"><div class="flow-header"><div class="flow-name-wrap"><span class="flow-name">${esc(safeFlow.name || "Unnamed flow")}</span><span class="flow-status-badge ${enabled ? "on" : "off"}">${enabled ? "● Active" : "Disabled"}</span></div><div class="flow-actions"><button class="flow-action" data-flow-action="toggle" data-flow-id="${esc(safeFlow.id)}">${enabled ? "Disable" : "Enable"}</button><button class="flow-action flow-action-primary" data-flow-action="edit" data-flow-id="${esc(safeFlow.id)}">Edit Flow</button><details class="flow-menu"><summary class="flow-menu-trigger" aria-label="More actions">⋯</summary><div class="flow-menu-items"><button class="flow-menu-item" data-flow-action="export" data-flow-id="${esc(safeFlow.id)}">Export</button><button class="flow-menu-item" data-flow-action="duplicate" data-flow-id="${esc(safeFlow.id)}">Duplicate</button><button class="flow-menu-item danger" data-flow-action="delete" data-flow-id="${esc(safeFlow.id)}">Delete</button></div></details></div></div><div class="flow-meta">${origin ? `${esc(origin.replace(/^https?:\/\//, ""))} · ` : ""}${safeFlow.steps.length} step${safeFlow.steps.length === 1 ? "" : "s"} · ${new Date(safeFlow.updatedAt || safeFlow.createdAt || Date.now()).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div><div class="flow-summary">${preview}${more}</div></article>`;
   }).join("") : `<div class="empty-editor"><strong>No flows yet</strong><span>Record a scenario to capture multiple API responses into a reusable test flow.</span><button id="record-flow-empty" class="btn btn-primary" type="button">Record Flow</button><button id="new-flow-empty" class="btn btn-secondary" type="button">+ New Flow</button></div>`;
   const activeCount = allFlows.filter((flow) => flow.enabled).length;
   const countSummary = allFlows.length ? `<span class="flows-count">${allFlows.length} flow${allFlows.length === 1 ? "" : "s"}${activeCount ? ` · ${activeCount} active` : ""}</span>` : "";
   const recordingMarkup = recording?.active ? renderRecordingBanner(recording) : "";
-  rulesElement.innerHTML = `<section class="flows-page"><div class="flows-header"><div><h2>Flows</h2><p>Reusable multi-step API scenarios${countSummary ? "" : "."}</p>${countSummary}</div><div class="flows-header-actions">${siteFilterMarkup}<button id="record-new-flow" class="btn btn-secondary" type="button">Record Flow</button><button id="new-flow-header" class="btn btn-primary" type="button">+ New Flow</button></div></div>${recordingMarkup}<div class="flow-list">${flowRows}</div></section>`;
+  rulesElement.innerHTML = `<section class="flows-page"><div class="flows-header"><div><h2>Flows</h2><p>Reusable multi-step API scenarios${countSummary ? "" : "."}</p>${countSummary}</div><div class="flows-header-actions">${siteFilterMarkup}<button id="import-flows" class="btn btn-secondary" type="button">Import</button><button id="export-flows" class="btn btn-secondary" type="button" ${allFlows.length ? "" : "disabled"}>Export</button><button id="record-new-flow" class="btn btn-secondary" type="button">Record Flow</button><button id="new-flow-header" class="btn btn-primary" type="button">+ New Flow</button></div></div>${recordingMarkup}<div class="flow-list">${flowRows}</div></section>`;
 }
 
 function renderRecordingBanner(recording) {
@@ -664,6 +702,8 @@ document.querySelectorAll(".top-nav-item").forEach((item) => {
 });
 rulesElement.addEventListener("click", (event) => {
   if (event.target.closest("#record-new-flow") || event.target.closest("#record-flow-empty")) { openRecordSetup(); return; }
+  if (event.target.closest("#import-flows")) { $("#import-flows-file").click(); return; }
+  if (event.target.closest("#export-flows")) { exportFlows(); return; }
   if (event.target.closest("#record-setup-cancel")) { closeRecordSetup(); return; }
   if (event.target.closest("#record-setup-start")) { confirmRecordSetup(); return; }
   if (event.target.closest("#record-setup-use-current-tab")) {
@@ -769,6 +809,7 @@ rulesElement.addEventListener("click", (event) => {
       state.flows = [duplicate, ...state.flows];
       persist(); render(); return;
     }
+    if (action === "export") { exportFlows(state.flows.filter((flow) => flow.id === flowId)); return; }
   }
   if (event.target.closest("#import-mocks")) { $("#import-file").click(); return; }
   if (event.target.closest("#export-mocks")) { exportMocks(); return; }
@@ -828,6 +869,10 @@ rulesElement.addEventListener("click", (event) => {
 $("#import-file").addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (file) importMocks(file);
+});
+$("#import-flows-file")?.addEventListener("change", (event) => {
+  const file = event.target.files?.[0];
+  if (file) importFlows(file);
 });
 rulesElement.addEventListener("input", (event) => {
   if (event.target.dataset.stepField) { editFlowField(event.target.dataset.stepField, event.target.value); return; }
@@ -897,4 +942,4 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // Test-only hook (mirrors the ApiMockOptionsUtils pattern) so recording lifecycle
 // logic can be exercised without simulating full DOM click delegation.
-window.__flowTestHooks = { getFlowDraft, flowDraftDirty, editFlowField, saveFlowDraft, resetFlowDraft, getState: () => state, startRecordingFlow, stopRecordingFlow, cancelRecordingFlow, createBlankFlow, setView, applyRouteFromHash, openFlowEditor, closeFlowEditor, deleteFlow, toggleFlow, flowOrigin, observedOrigins, setFlowSiteFilter: (value) => { state.flowSiteFilter = value; render(); }, openRecordSetup, closeRecordSetup, confirmRecordSetup, buildMonitorScope, normalizeMonitorTarget };
+window.__flowTestHooks = { getFlowDraft, flowDraftDirty, editFlowField, saveFlowDraft, resetFlowDraft, getState: () => state, startRecordingFlow, stopRecordingFlow, cancelRecordingFlow, createBlankFlow, setView, applyRouteFromHash, openFlowEditor, closeFlowEditor, deleteFlow, toggleFlow, flowOrigin, observedOrigins, flowExportPayload, importFlowsPayload, setFlowSiteFilter: (value) => { state.flowSiteFilter = value; render(); }, openRecordSetup, closeRecordSetup, confirmRecordSetup, buildMonitorScope, normalizeMonitorTarget };

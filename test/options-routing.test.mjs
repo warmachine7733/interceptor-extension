@@ -22,7 +22,7 @@ function makeElement(id) {
 // options-utils.js + options.js and exercise routing/navigation via __flowTestHooks.
 function buildOptionsContext({ initialStorage = {}, initialHash = "" } = {}) {
   let storedData = { ...initialStorage };
-  const knownIds = ["#rules", "#version-name", "#enabled", "#dark-mode", "#add", "#toggle-status", "#import-file"];
+  const knownIds = ["#rules", "#version-name", "#enabled", "#dark-mode", "#add", "#toggle-status", "#import-file", "#import-flows-file"];
   const elementsById = {};
   for (const id of knownIds) elementsById[id] = makeElement(id);
 
@@ -181,6 +181,19 @@ test("enabling a flow disables any previously-active flow (single-active-flow se
   assert.equal(state.activeFlowId, "flow-a");
   assert.equal(state.flows.find((f) => f.id === "flow-a").enabled, true);
   assert.equal(state.flows.find((f) => f.id === "flow-b").enabled, false, "toggling a flow on must disable the previously active one");
+  assert.equal(state.enabled, false, "a Flow button must not override the global extension switch");
+});
+
+test("flow exports round-trip safely and imported flows start disabled", () => {
+  const flow = { id: "flow-export", name: "Checkout", enabled: true, createdAt: 1, updatedAt: 2, steps: [{ id: "step-1", order: 0, enabled: true, matcher: { method: "POST", urlPattern: "https://api.example.com/checkout" }, response: { status: 201, body: "ok" } }] };
+  const { hooks } = buildOptionsContext({ initialStorage: { flows: [flow] } });
+  const payload = hooks.flowExportPayload([flow]);
+  assert.equal(payload.kind, "api-mock-flows");
+  assert.equal(payload.flows[0].steps[0].matcher.urlPattern, "https://api.example.com/checkout");
+  hooks.importFlowsPayload(payload);
+  const imported = hooks.getState().flows[1];
+  assert.notEqual(imported.id, flow.id, "a duplicate id is regenerated on import");
+  assert.equal(imported.enabled, false, "an import must not activate interception unexpectedly");
 });
 
 test("live recording captured count updates through a storage change without reloading the page", () => {
@@ -345,5 +358,3 @@ test("a recording session started with no monitorScope (legacy path) behaves as 
   hooks.startRecordingFlow(); // no explicit args -> legacy prompt-based path
   assert.deepEqual({ ...hooks.getState().recording.monitorScope }, { type: "global" });
 });
-
-
