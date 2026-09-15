@@ -4,6 +4,7 @@ let state = { enabled: false, darkMode: false, rules: [], flows: [], activeFlowI
 let selectedRuleId = null;
 let activeView = "response";
 let activeResponseIndex = 0;
+let activeResponseRuleId = null;
 let flowStepView = "response";
 let flowDraft = null;
 let flowDraftBaseline = null;
@@ -668,6 +669,12 @@ function render() {
   if (!selectedRuleId || !state.rules.some((rule) => rule.id === selectedRuleId)) selectedRuleId = state.rules[0]?.id || null;
   const selectedRule = state.rules.find((rule) => rule.id === selectedRuleId);
   if (selectedRule) {
+    // Response tabs belong to an individual mock. When a different mock is selected
+    // (including the first one after reload), restore that mock's published default.
+    if (activeResponseRuleId !== selectedRule.id) {
+      activeResponseRuleId = selectedRule.id;
+      activeResponseIndex = Math.min(Math.max(Number(selectedRule.defaultResponseIndex) || 0, 0), selectedRule.responses.length - 1);
+    }
     activeResponseIndex = Math.min(activeResponseIndex, selectedRule.responses.length - 1);
     selectedRule.response = selectedRule.responses[activeResponseIndex];
   }
@@ -710,7 +717,7 @@ function collectRule(editor, baseRule) {
   delete rule._isNew;
   return rule;
 }
-function addRule() { const rule = { ...makeRule(), _isNew: true }; rule.response = rule.responses[0]; state.rules.push(rule); selectedRuleId = rule.id; activeResponseIndex = 0; activeView = "response"; render(); const editor = $(".editor"); markDirty(editor); $(".editor-url", editor)?.focus(); }
+function addRule() { const rule = { ...makeRule(), _isNew: true }; rule.response = rule.responses[0]; state.rules.push(rule); selectedRuleId = rule.id; activeResponseRuleId = rule.id; activeResponseIndex = 0; activeView = "response"; render(); const editor = $(".editor"); markDirty(editor); $(".editor-url", editor)?.focus(); }
 
 $("#enabled").addEventListener("change", (event) => { state.enabled = event.target.checked; persist(); $("#toggle-status").textContent = state.enabled ? "Active" : "Inactive"; });
 $("#dark-mode").addEventListener("change", (event) => { state.darkMode = event.target.checked; applyTheme(); persist(); });
@@ -843,6 +850,7 @@ rulesElement.addEventListener("click", (event) => {
     }
     if (event.target.closest(".rule-enabled")) return;
     selectedRuleId = mockItem.dataset.id;
+    activeResponseRuleId = null;
     render();
     return;
   }

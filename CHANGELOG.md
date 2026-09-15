@@ -3,6 +3,10 @@
 
 
 
+
+## 1.2.4
+- Keep each mock's published response tab independent and restore it after reload.
+
 ## 1.2.3
 - Improve Flow controls, API search, and move Watched Domains into Settings.
 
