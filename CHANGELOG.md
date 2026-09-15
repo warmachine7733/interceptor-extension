@@ -2,9 +2,14 @@
 
 
 
+
+## 1.2.3
+- Improve Flow controls, API search, and move Watched Domains into Settings.
+
 ## 1.2.2
 - Made the header Active/Inactive switch the master control for every mock and Flow; disabling it always restores native requests without changing saved Flow activation.
 - Added Flow JSON import/export, including exporting all Flows or an individual Flow from its actions menu. Imported Flows start disabled to avoid unexpected interception.
+- Clarified Flow states with Live, Paused, and Disabled labels, plus an on-screen explanation whenever the master toggle pauses replay.
 
 ## 1.2.1
 - Scope mocking and recording to explicitly watched application hosts

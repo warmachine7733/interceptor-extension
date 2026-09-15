@@ -88,8 +88,8 @@ button { cursor: pointer; }
   backdrop-filter: blur(4px);
 }
 .top-nav { display: flex; align-self: stretch; align-items: center; gap: 24px; color: #94a3b8; font-size: 12px; font-weight: 600; }
-.top-nav span { display: flex; height: 100%; align-items: center; position: relative; transition: color 0.15s ease; cursor: pointer; }
-.top-nav span:hover { color: #f8fafc; }
+.top-nav > .top-nav-item { display: flex; height: 100%; align-items: center; position: relative; transition: color 0.15s ease; cursor: pointer; }
+.top-nav > .top-nav-item:hover { color: #f8fafc; }
 .top-nav-active { color: #f8fafc; }
 .top-nav-active::after {
   position: absolute;
@@ -867,6 +867,10 @@ body.dark-mode .response-variant-close { color: #94a3b8; }
   background: var(--soft);
 }
 .flow-status-badge.on { color: #15803d; background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.3); }
+.flow-status-badge.paused { color: #a16207; background: rgba(234, 179, 8, .12); border-color: rgba(234, 179, 8, .32); }
+.flow-master-notice { display: flex; align-items: baseline; gap: 10px; padding: 11px 14px; border: 1px solid rgba(234, 179, 8, .35); border-radius: 9px; background: rgba(254, 249, 195, .68); color: #854d0e; font-size: 12px; }
+.flow-master-notice span { color: #a16207; }
+.flow-badge.is-live { color: #15803d; border-color: rgba(34, 197, 94, .3); background: rgba(34, 197, 94, .12); }
 .flow-actions {
   display: flex;
   align-items: center;
@@ -884,7 +888,8 @@ body.dark-mode .response-variant-close { color: #94a3b8; }
   font-weight: 600;
 }
 .flow-action.danger { color: #b91c1c; }
-.flow-action-primary { border-color: rgba(249, 115, 22, 0.4); color: var(--orange-dark); }
+.flow-action-primary { border-color: var(--orange); background: var(--orange); color: #fff; box-shadow: var(--shadow-sm); }
+.flow-action-primary:hover { border-color: var(--orange-dark); background: var(--orange-dark); color: #fff; }
 .flow-menu { position: relative; }
 .flow-menu-trigger {
   display: inline-flex;
@@ -1126,6 +1131,9 @@ body.dark-mode .flow-step-inspector textarea { background: #090d16; border-color
 body.dark-mode .flow-step-number { background: #1e293b; color: #94a3b8; }
 body.dark-mode .flow-status-badge { border-color: var(--line); background: #0f172a; }
 body.dark-mode .flow-status-badge.on { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.35); color: #4ade80; }
+body.dark-mode .flow-status-badge.paused { color: #facc15; background: rgba(234, 179, 8, .12); border-color: rgba(234, 179, 8, .3); }
+body.dark-mode .flow-master-notice { background: rgba(113, 63, 18, .2); border-color: rgba(234, 179, 8, .28); color: #fde68a; }
+body.dark-mode .flow-master-notice span { color: #fcd34d; }
 body.dark-mode .recording-banner { background: rgba(127, 29, 29, 0.18); border-color: rgba(248, 113, 113, 0.2); }
 body.dark-mode .record-setup { background: #0b1120; border-color: var(--line); }
 body.dark-mode .record-setup-current-tab { background: #0f172a; }
@@ -1227,6 +1235,10 @@ body.view-flows .app-main { max-width: 1440px; }
 }
 
 .watched-hosts { margin-bottom: 18px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.settings-page { width: 100%; max-width: 900px; margin: 26px auto 40px; }
+.settings-page[hidden], .rules-container[hidden] { display: none !important; }
+.settings-page::before { content: "Settings"; display: block; margin-bottom: 16px; color: var(--ink); font-size: 28px; font-weight: 700; letter-spacing: -.6px; }
+.settings-page .watched-hosts { margin: 0; }
 .watched-hosts summary { cursor: pointer; font-weight: 650; }
 #watched-count { margin-left: 8px; color: var(--muted); }
 .watched-hosts p { color: var(--muted); font-size: 12px; margin: 10px 0; }
@@ -1274,6 +1286,17 @@ body.view-flows .app-main { padding-top: 28px; }
 .flow-name { letter-spacing: -.25px; }
 .flow-actions { gap: 6px; }
 .flow-action, .flow-menu-trigger { min-height: 34px; background: var(--panel); }
+.flows-page .flow-action-primary {
+  border-color: var(--orange);
+  background: var(--orange);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.flows-page .flow-action-primary:hover {
+  border-color: var(--orange-dark);
+  background: var(--orange-dark);
+  color: #fff;
+}
 .flow-meta { margin: 14px 0; overflow-wrap: anywhere; }
 .flows-page .flow-summary { margin-top: 0; padding: 14px; gap: 10px; border: 1px solid var(--line-subtle); border-radius: 8px; background: var(--canvas); }
 .flow-step-preview-row { gap: 10px; }
@@ -1323,6 +1346,34 @@ body.view-flows .flow-add-step { margin-top: 12px; background: transparent; bord
 .record-setup-radio { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .record-setup-radio:has(input:checked) { border-color: var(--orange); background: var(--orange-light); }
 .record-setup-radio input { accent-color: var(--orange); }
+
+/* Keep the Flow editor focused on the selected response instead of chrome and empty fields. */
+.flow-editor-header { padding: 16px 24px; }
+.flow-editor-header .flow-back-link { margin-bottom: 8px; }
+.flow-editor-title-row h2 { font-size: 20px; }
+.flow-editor-header p { margin-top: 3px; }
+.flow-editor-actions { gap: 6px; }
+.flow-editor-actions .btn { min-height: 34px; padding: 7px 11px; }
+.flow-editor-actions .flow-editor-toggle { border-color: rgba(249, 115, 22, .42); color: var(--orange-dark); }
+.flow-editor-layout { grid-template-columns: 280px minmax(0, 1fr); min-height: 520px; }
+.flow-step-panel { padding: 16px 10px; max-height: min(720px, calc(100vh - 190px)); }
+.flow-search { display: block; padding: 0 7px 10px; }
+.flow-search input { width: 100%; height: 34px; padding: 7px 9px 7px 29px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel) linear-gradient(135deg, transparent 47%, var(--muted) 48%, var(--muted) 52%, transparent 53%) 10px 12px / 9px 9px no-repeat; color: var(--ink); font: inherit; font-size: 11px; }
+.flow-search input:focus { border-color: var(--orange); outline: 2px solid rgba(249, 115, 22, .16); outline-offset: 1px; }
+.flow-search-empty { padding: 15px 10px; color: var(--muted); font-size: 11px; line-height: 1.45; text-align: center; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.flow-step-item { padding: 9px 8px; }
+.flow-step-inspector { padding: 20px 28px 24px; gap: 15px; }
+.flow-step-header-row h3 { font-size: 16px; margin-top: 3px; }
+.flow-step-inspector .editor-tabs { margin-top: 2px; }
+.flow-step-inspector .editor-panel.active { gap: 11px; }
+.flow-step-inspector .flow-form-grid { gap: 12px; }
+.flow-step-inspector textarea.flow-headers-editor { height: 82px; min-height: 82px; padding: 10px 12px; line-height: 1.45; }
+.flow-step-inspector textarea.body-editor { height: 260px; min-height: 180px; padding: 14px; line-height: 1.6; }
+.flow-step-inspector .body-heading { margin: 1px 0 -4px; }
+@media (max-width: 900px) {
+  .flow-editor-layout { grid-template-columns: 240px minmax(0, 1fr); }
+}
 .record-setup-current-tab { flex-wrap: wrap; overflow-wrap: anywhere; }
 .record-setup-actions { padding-top: 8px; border-top: 1px solid var(--line); }
 .recording-banner { padding: 20px 24px; border-radius: 14px; }

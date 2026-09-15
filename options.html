@@ -21,6 +21,7 @@
         <nav class="top-nav" aria-label="Primary navigation">
           <span class="top-nav-item top-nav-active" data-view="mocks">My Mocks</span>
           <span class="top-nav-item" data-view="flows">Flows</span>
+          <span class="top-nav-item" data-view="settings">Settings</span>
         </nav>
         <div class="header-right">
           <div class="toggle-container extension-toggle">
@@ -45,6 +46,7 @@
     </header>
 
     <main class="app-main">
+      <section id="settings-panel" class="settings-page" hidden>
       <details class="watched-hosts" open>
         <summary>Watched Domains <span id="watched-count">0</span></summary>
         <p>Only pages/apps on these exact hosts can use mocks or recording, including calls to other API domains. Include the port for local apps. An empty list leaves all requests alone.</p>
@@ -56,6 +58,7 @@
         <p id="watched-error" role="alert"></p>
         <ul id="watched-list"></ul>
       </details>
+      </section>
       <div class="rules-container">
         <div class="rules-header">
           <h2 class="rules-header-title">My Mocks</h2>

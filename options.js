@@ -9,6 +9,7 @@ let flowDraft = null;
 let flowDraftBaseline = null;
 let flowDraftError = "";
 let flowSaving = false;
+let flowStepSearch = "";
 const cloneFlow = (flow) => JSON.parse(JSON.stringify(flow));
 const draftContent = (flow) => {
   if (!flow) return null;
@@ -145,13 +146,14 @@ function observedOrigins() {
   return [...origins];
 }
 
-// Lightweight hash routing: #/mocks (default/home), #/flows, #/flows/:flowId.
+// Lightweight hash routing: #/mocks (default/home), #/flows, #/flows/:flowId, #/settings.
 // The hash is the source of truth for navigation (back/forward, refresh, deep links);
 // `state.view`/`state.flowEditorId` stay in sync with it but are not part of the
 // persisted schema themselves - only the derived `state.view` field is (as before).
 function routeHashForState() {
   if (state.view === "flows" && state.flowEditorId) return `#/flows/${encodeURIComponent(state.flowEditorId)}`;
   if (state.view === "flows") return "#/flows";
+  if (state.view === "settings") return "#/settings";
   return "#/mocks";
 }
 function syncHashWithState() {
@@ -169,6 +171,9 @@ function applyRouteFromHash() {
     state.flowEditorId = exists ? requestedId : null;
     state.flowSelectedStepIndex = 0;
     if (requestedId && !exists) syncHashWithState(); // deleted/invalid flow id - fall back to the flow list safely
+  } else if (segments[0] === "settings") {
+    state.view = "settings";
+    state.flowEditorId = null;
   } else {
     state.view = "mocks";
     state.flowEditorId = null;
@@ -510,9 +515,12 @@ function flowEndpoint(url) {
 const flowIcon = (path) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="' + path + '"></path></svg>';
 function renderFlowEditor(flow) {
   const safeFlow = { ...(getFlowDraft() || normalizeFlow(flow)), enabled: flow.enabled };
+  const flowRunState = safeFlow.enabled ? (state.enabled ? "Ready to intercept" : "Paused — turn on the header toggle to run") : "Disabled";
   const selectedIndex = Math.min(Number(state.flowSelectedStepIndex || 0), Math.max(safeFlow.steps.length - 1, 0));
   const selectedStep = safeFlow.steps[selectedIndex] || null;
-  const stepsHtml = safeFlow.steps.map((step, index) => `<div class="flow-step-item ${index === selectedIndex ? "selected" : ""}"><input class="flow-step-toggle" type="checkbox" data-step-toggle="${index}" ${step.enabled === false ? "" : "checked"} aria-label="Toggle step ${index + 1}"><button class="flow-step-select" data-step-select="${index}" type="button" aria-current="${index === selectedIndex ? "step" : "false"}"><span class="flow-step-number">${String(index + 1).padStart(2, "0")}</span><span class="flow-step-meta-text"><span class="method-text ${methodClass(step.matcher?.method)}">${esc(step.matcher?.method || "GET")}</span><span class="flow-step-path" title="${esc(step.matcher?.urlPattern || step.request?.url)}">${esc(flowEndpoint(step.matcher?.urlPattern || step.request?.url))}</span>${step.pageContext?.origin ? `<span class="flow-step-route" title="${esc(step.pageContext.origin)}${esc(step.pageContext.pathname)}">Page ${esc(step.pageContext.pathname || "/")}</span>` : ""}</span><span class="flow-step-status">${esc(step.response?.status || 200)}</span></button></div>`).join("");
+  const query = flowStepSearch.trim().toLowerCase();
+  const visibleSteps = safeFlow.steps.map((step, index) => ({ step, index })).filter(({ step }) => !query || [step.matcher?.method, step.matcher?.urlPattern, step.request?.url, step.pageContext?.origin, step.pageContext?.pathname].some((value) => String(value || "").toLowerCase().includes(query)));
+  const stepsHtml = visibleSteps.map(({ step, index }) => `<div class="flow-step-item ${index === selectedIndex ? "selected" : ""}"><input class="flow-step-toggle" type="checkbox" data-step-toggle="${index}" ${step.enabled === false ? "" : "checked"} aria-label="Toggle step ${index + 1}"><button class="flow-step-select" data-step-select="${index}" type="button" aria-current="${index === selectedIndex ? "step" : "false"}"><span class="flow-step-number">${String(index + 1).padStart(2, "0")}</span><span class="flow-step-meta-text"><span class="method-text ${methodClass(step.matcher?.method)}">${esc(step.matcher?.method || "GET")}</span><span class="flow-step-path" title="${esc(step.matcher?.urlPattern || step.request?.url)}">${esc(flowEndpoint(step.matcher?.urlPattern || step.request?.url))}</span>${step.pageContext?.origin ? `<span class="flow-step-route" title="${esc(step.pageContext.origin)}${esc(step.pageContext.pathname)}">Page ${esc(step.pageContext.pathname || "/")}</span>` : ""}</span><span class="flow-step-status">${esc(step.response?.status || 200)}</span></button></div>`).join("");
 
   const inspector = selectedStep ? `
     <div class="flow-step-inspector">
@@ -538,7 +546,7 @@ function renderFlowEditor(flow) {
           <label>Method<select data-step-field="method">${[...new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "*", selectedStep?.matcher?.method || "GET"])].map(method => `<option ${method === (selectedStep?.matcher?.method || "GET") ? "selected" : ""}>${esc(method)}</option>`).join("")}</select></label>
           <label>URL pattern<input data-step-field="urlPattern" value="${esc(selectedStep?.matcher?.urlPattern || selectedStep?.request?.url || "*")}"></label>
         </div>
-        <label>Request headers<textarea data-step-field="requestHeaders">${esc(typeof selectedStep?.request?.headers === "string" ? selectedStep.request.headers : JSON.stringify(selectedStep?.request?.headers || {}, null, 2))}</textarea></label>
+        <label>Request headers<textarea class="flow-headers-editor" data-step-field="requestHeaders">${esc(typeof selectedStep?.request?.headers === "string" ? selectedStep.request.headers : JSON.stringify(selectedStep?.request?.headers || {}, null, 2))}</textarea></label>
         <div class="body-heading"><span>Request body</span><button class="format-json" type="button" data-step-format="requestBody">Format JSON</button></div>
         <textarea class="body-editor" data-step-field="requestBody">${esc(typeof selectedStep?.request?.body === "string" ? selectedStep.request.body : JSON.stringify(selectedStep?.request?.body ?? "", null, 2))}</textarea>
       </div>
@@ -548,7 +556,7 @@ function renderFlowEditor(flow) {
           <label>Status<input data-step-field="status" type="number" value="${esc(selectedStep?.response?.status || 200)}"></label>
           <label>Delay (ms)<input data-step-field="delay" type="number" value="${esc(selectedStep?.delay || 0)}"></label>
         </div>
-        <label>Response headers<textarea data-step-field="responseHeaders">${esc(typeof selectedStep?.response?.headers === "string" ? selectedStep.response.headers : JSON.stringify(selectedStep?.response?.headers || {}, null, 2))}</textarea></label>
+        <label>Response headers<textarea class="flow-headers-editor" data-step-field="responseHeaders">${esc(typeof selectedStep?.response?.headers === "string" ? selectedStep.response.headers : JSON.stringify(selectedStep?.response?.headers || {}, null, 2))}</textarea></label>
         <div class="body-heading"><span>Response body</span><button class="format-json" type="button" data-step-format="responseBody">Format JSON</button></div>
         <textarea class="body-editor response-body-editor" data-step-field="responseBody">${esc(typeof selectedStep?.response?.body === "string" ? selectedStep.response.body : JSON.stringify(selectedStep?.response?.body ?? "", null, 2))}</textarea>
       </div>
@@ -557,7 +565,8 @@ function renderFlowEditor(flow) {
   ` : "";
 
   const addStep = '<button id="add-flow-step" class="btn btn-secondary flow-add-step" type="button">+ Add Step</button>';
-  rulesElement.innerHTML = `<section class="flow-editor-shell"><div class="flow-editor-header"><button id="close-flow-editor" class="flow-back-link" type="button">&larr; Flows</button><div class="flow-header-main"><div><div class="flow-editor-title-row"><h2>${esc(safeFlow.name || "Flow")}</h2><span class="flow-badge">${safeFlow.enabled ? "Enabled" : "Disabled"}</span></div><p>${safeFlow.steps.length} step${safeFlow.steps.length === 1 ? "" : "s"}</p></div><div class="flow-editor-actions"><span id="flow-unsaved" ${flowDraftDirty() ? "" : "hidden"}>&bull; Unsaved changes</span><button id="rename-flow" class="btn btn-secondary" type="button">Rename</button><button id="reset-flow" class="btn btn-secondary" type="button" ${!flowDraftDirty() || flowSaving ? "disabled" : ""}>Discard Changes</button><button id="save-flow" class="btn btn-primary" type="button" ${!flowDraftDirty() || flowSaving ? "disabled" : ""}>Save Flow</button></div></div><p id="flow-draft-error" role="alert">${esc(flowDraftError)}</p></div>${safeFlow.steps.length ? `<div class="flow-editor-layout"><aside class="flow-step-panel"><div class="flow-rail-heading">API STEPS</div>${stepsHtml}${addStep}</aside>${inspector}</div>` : `<div class="flow-empty"><span class="flow-empty-icon">${flowIcon("M12 5v14M5 12h14")}</span><h3>No steps yet</h3><p>Add an API step to build this Flow.</p>${addStep}</div>`}</section>`;
+  const noMatches = query && !visibleSteps.length ? `<div class="flow-search-empty">No APIs match “${esc(flowStepSearch)}”.</div>` : "";
+  rulesElement.innerHTML = `<section class="flow-editor-shell"><div class="flow-editor-header"><button id="close-flow-editor" class="flow-back-link" type="button">&larr; Back to Flows</button><div class="flow-header-main"><div><div class="flow-editor-title-row"><h2>${esc(safeFlow.name || "Flow")}</h2><span class="flow-badge ${safeFlow.enabled && state.enabled ? "is-live" : ""}">${esc(flowRunState)}</span></div><p>${safeFlow.steps.length} step${safeFlow.steps.length === 1 ? "" : "s"}</p></div><div class="flow-editor-actions"><span id="flow-unsaved" ${flowDraftDirty() ? "" : "hidden"}>&bull; Unsaved changes</span><button class="btn btn-secondary flow-editor-toggle" data-flow-action="toggle" data-flow-id="${esc(safeFlow.id)}" type="button">${safeFlow.enabled ? "Disable Flow" : "Enable Flow"}</button><button id="rename-flow" class="btn btn-secondary" type="button">Rename</button><button id="reset-flow" class="btn btn-secondary" type="button" ${!flowDraftDirty() || flowSaving ? "disabled" : ""}>Discard Changes</button><button id="save-flow" class="btn btn-primary" type="button" ${!flowDraftDirty() || flowSaving ? "disabled" : ""}>Save Flow</button></div></div><p id="flow-draft-error" role="alert">${esc(flowDraftError)}</p></div>${safeFlow.steps.length ? `<div class="flow-editor-layout"><aside class="flow-step-panel"><div class="flow-rail-heading">API STEPS <span>${visibleSteps.length}/${safeFlow.steps.length}</span></div><label class="flow-search"><span class="sr-only">Search APIs</span><input id="flow-step-search" type="search" value="${esc(flowStepSearch)}" placeholder="Search APIs…" autocomplete="off"></label>${stepsHtml}${noMatches}${addStep}</aside>${inspector}</div>` : `<div class="flow-empty"><span class="flow-empty-icon">${flowIcon("M12 5v14M5 12h14")}</span><h3>No steps yet</h3><p>Add an API step to build this Flow.</p>${addStep}</div>`}</section>`;
 }
 
 
@@ -607,6 +616,8 @@ function renderFlows() {
   const siteFilterMarkup = siteOrigins.length ? `<label class="flow-site-filter">Site<select id="flow-site-filter"><option value="all" ${activeFilter === "all" ? "selected" : ""}>All Flows</option>${siteOrigins.map((origin) => `<option value="${esc(origin)}" ${activeFilter === origin ? "selected" : ""}>${esc(origin.replace(/^https?:\/\//, ""))}</option>`).join("")}</select></label>` : "";
   const flowRows = visibleFlows.length ? visibleFlows.map((safeFlow) => {
     const enabled = Boolean(safeFlow.enabled);
+    const isRunning = enabled && state.enabled;
+    const status = isRunning ? "● Live" : enabled ? "Paused · master off" : "Disabled";
     const origin = flowOrigin(safeFlow);
     const previewSteps = safeFlow.steps.slice(0, 4);
     const remaining = safeFlow.steps.length - previewSteps.length;
@@ -617,12 +628,13 @@ function renderFlows() {
     }).join("");
     const preview = previewRows || `<div class="flow-step-more">No requests captured yet.</div>`;
     const more = remaining > 0 ? `<div class="flow-step-more">+${remaining} more</div>` : "";
-    return `<article class="flow-item ${enabled ? "flow-active" : ""}"><div class="flow-header"><div class="flow-name-wrap"><span class="flow-name">${esc(safeFlow.name || "Unnamed flow")}</span><span class="flow-status-badge ${enabled ? "on" : "off"}">${enabled ? "● Active" : "Disabled"}</span></div><div class="flow-actions"><button class="flow-action" data-flow-action="toggle" data-flow-id="${esc(safeFlow.id)}">${enabled ? "Disable" : "Enable"}</button><button class="flow-action flow-action-primary" data-flow-action="edit" data-flow-id="${esc(safeFlow.id)}">Edit Flow</button><details class="flow-menu"><summary class="flow-menu-trigger" aria-label="More actions">⋯</summary><div class="flow-menu-items"><button class="flow-menu-item" data-flow-action="export" data-flow-id="${esc(safeFlow.id)}">Export</button><button class="flow-menu-item" data-flow-action="duplicate" data-flow-id="${esc(safeFlow.id)}">Duplicate</button><button class="flow-menu-item danger" data-flow-action="delete" data-flow-id="${esc(safeFlow.id)}">Delete</button></div></details></div></div><div class="flow-meta">${origin ? `${esc(origin.replace(/^https?:\/\//, ""))} · ` : ""}${safeFlow.steps.length} step${safeFlow.steps.length === 1 ? "" : "s"} · ${new Date(safeFlow.updatedAt || safeFlow.createdAt || Date.now()).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div><div class="flow-summary">${preview}${more}</div></article>`;
+    return `<article class="flow-item ${isRunning ? "flow-active" : ""}"><div class="flow-header"><div class="flow-name-wrap"><span class="flow-name">${esc(safeFlow.name || "Unnamed flow")}</span><span class="flow-status-badge ${isRunning ? "on" : enabled ? "paused" : "off"}">${status}</span></div><div class="flow-actions"><button class="flow-action" data-flow-action="toggle" data-flow-id="${esc(safeFlow.id)}">${enabled ? "Disable Flow" : "Enable Flow"}</button><button class="flow-action flow-action-primary" data-flow-action="edit" data-flow-id="${esc(safeFlow.id)}">Edit Flow</button><details class="flow-menu"><summary class="flow-menu-trigger" aria-label="More actions">⋯</summary><div class="flow-menu-items"><button class="flow-menu-item" data-flow-action="export" data-flow-id="${esc(safeFlow.id)}">Export flow</button><button class="flow-menu-item" data-flow-action="duplicate" data-flow-id="${esc(safeFlow.id)}">Duplicate</button><button class="flow-menu-item danger" data-flow-action="delete" data-flow-id="${esc(safeFlow.id)}">Delete</button></div></details></div></div><div class="flow-meta">${origin ? `${esc(origin.replace(/^https?:\/\//, ""))} · ` : ""}${safeFlow.steps.length} step${safeFlow.steps.length === 1 ? "" : "s"} · ${new Date(safeFlow.updatedAt || safeFlow.createdAt || Date.now()).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div><div class="flow-summary">${preview}${more}</div></article>`;
   }).join("") : `<div class="empty-editor"><strong>No flows yet</strong><span>Record a scenario to capture multiple API responses into a reusable test flow.</span><button id="record-flow-empty" class="btn btn-primary" type="button">Record Flow</button><button id="new-flow-empty" class="btn btn-secondary" type="button">+ New Flow</button></div>`;
   const activeCount = allFlows.filter((flow) => flow.enabled).length;
   const countSummary = allFlows.length ? `<span class="flows-count">${allFlows.length} flow${allFlows.length === 1 ? "" : "s"}${activeCount ? ` · ${activeCount} active` : ""}</span>` : "";
   const recordingMarkup = recording?.active ? renderRecordingBanner(recording) : "";
-  rulesElement.innerHTML = `<section class="flows-page"><div class="flows-header"><div><h2>Flows</h2><p>Reusable multi-step API scenarios${countSummary ? "" : "."}</p>${countSummary}</div><div class="flows-header-actions">${siteFilterMarkup}<button id="import-flows" class="btn btn-secondary" type="button">Import</button><button id="export-flows" class="btn btn-secondary" type="button" ${allFlows.length ? "" : "disabled"}>Export</button><button id="record-new-flow" class="btn btn-secondary" type="button">Record Flow</button><button id="new-flow-header" class="btn btn-primary" type="button">+ New Flow</button></div></div>${recordingMarkup}<div class="flow-list">${flowRows}</div></section>`;
+  const masterNotice = !state.enabled && activeCount ? `<div class="flow-master-notice"><strong>Flows are paused</strong><span>The header toggle is off, so no mocks or Flows can intercept requests.</span></div>` : "";
+  rulesElement.innerHTML = `<section class="flows-page"><div class="flows-header"><div><h2>Flows</h2><p>Reusable multi-step API scenarios${countSummary ? "" : "."}</p>${countSummary}</div><div class="flows-header-actions">${siteFilterMarkup}<button id="import-flows" class="btn btn-secondary" type="button">Import flows</button><button id="export-flows" class="btn btn-secondary" type="button" ${allFlows.length ? "" : "disabled"}>Export flows</button><button id="record-new-flow" class="btn btn-secondary" type="button">Record Flow</button><button id="new-flow-header" class="btn btn-primary" type="button">+ New Flow</button></div></div>${masterNotice}${recordingMarkup}<div class="flow-list">${flowRows}</div></section>`;
 }
 
 function renderRecordingBanner(recording) {
@@ -643,6 +655,12 @@ function renderRecordingBanner(recording) {
 function render() {
   document.querySelectorAll(".top-nav-item").forEach(item => item.classList.toggle("top-nav-active", item.dataset.view === state.view));
   document.body.classList.toggle("view-flows", state.view === "flows");
+  document.body.classList.toggle("view-settings", state.view === "settings");
+  const settingsPanel = $("#settings-panel");
+  const rulesContainer = $(".rules-container");
+  if (settingsPanel) settingsPanel.hidden = state.view !== "settings";
+  if (rulesContainer) rulesContainer.hidden = state.view === "settings";
+  if (state.view === "settings") return;
   if (state.view === "flows") {
     renderFlows();
     return;
@@ -875,6 +893,7 @@ $("#import-flows-file")?.addEventListener("change", (event) => {
   if (file) importFlows(file);
 });
 rulesElement.addEventListener("input", (event) => {
+  if (event.target.id === "flow-step-search") { flowStepSearch = event.target.value; render(); return; }
   if (event.target.dataset.stepField) { editFlowField(event.target.dataset.stepField, event.target.value); return; }
   const editor = event.target.closest(".editor");
   if (!editor || !event.target.dataset.path) return;
