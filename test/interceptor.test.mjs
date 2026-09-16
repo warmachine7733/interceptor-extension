@@ -599,8 +599,8 @@ test("switching the current page/site does not affect manual mock matching at al
 
 // --- Record Flow capture filter (recording only - never affects mocks/replay) ---
 
-function recordingConfig(monitorScope, apiOrigin) {
-  return { enabled: true, rules: [], recording: { active: true, name: "Journey", captured: [], startedAt: Date.now(), flowId: "rec-filter", monitorScope, ...(apiOrigin ? { apiOrigin } : {}) } };
+function recordingConfig(monitorScope) {
+  return { enabled: true, rules: [], recording: { active: true, name: "Journey", captured: [], startedAt: Date.now(), flowId: "rec-filter", monitorScope } };
 }
 const fakeOkResponse = { status: 200, headers: { get: () => null }, clone: () => ({ text: async () => "ok" }) };
 
@@ -651,8 +651,8 @@ test("Global monitor captures regardless of the current page", async () => {
   assert.equal(lastWrite.recording.captured.length, 1);
 });
 
-test("recording captures only its configured API origin after the monitored page scope matches", async () => {
-  const { sandbox, calls } = buildPageContext(recordingConfig({ type: "site", origin: "https://app.company.com" }, "https://api.company.com"), fakeOkResponse, { origin: "https://app.company.com", pathname: "/accounts" });
+test("recording captures every API destination after the monitored page scope matches", async () => {
+  const { sandbox, calls } = buildPageContext(recordingConfig({ type: "site", origin: "https://app.company.com" }), fakeOkResponse, { origin: "https://app.company.com", pathname: "/accounts" });
   await new Promise((r) => setTimeout(r, 0));
   await sandbox.fetch("https://api.company.com/profile");
   await sandbox.fetch("https://api.company.com/orders?view=all#recent");
@@ -661,11 +661,11 @@ test("recording captures only its configured API origin after the monitored page
   await sandbox.fetch("https://auth.company.com/token");
   await new Promise((r) => setTimeout(r, 30));
   const lastWrite = calls.storageSets[calls.storageSets.length - 1];
-  assert.deepEqual(Array.from(lastWrite.recording.captured, record => record.url), ["https://api.company.com/profile", "https://api.company.com/orders?view=all#recent"]);
+  assert.deepEqual(Array.from(lastWrite.recording.captured, record => record.url), ["https://api.company.com/profile", "https://api.company.com/orders?view=all#recent", "https://api.company.com.evil.com/lookalike", "https://api.company.com:8443/other-port", "https://auth.company.com/token"]);
 });
 
-test("API-origin recording filter cannot capture a matching API from an unrelated app", async () => {
-  const { sandbox, calls } = buildPageContext(recordingConfig({ type: "site", origin: "https://app.company.com" }, "https://api.company.com"), fakeOkResponse, { origin: "https://other-app.com", pathname: "/accounts" });
+test("recording cannot capture an API from an unrelated app", async () => {
+  const { sandbox, calls } = buildPageContext(recordingConfig({ type: "site", origin: "https://app.company.com" }), fakeOkResponse, { origin: "https://other-app.com", pathname: "/accounts" });
   await new Promise((r) => setTimeout(r, 0));
   await sandbox.fetch("https://api.company.com/profile");
   await new Promise((r) => setTimeout(r, 20));
@@ -734,7 +734,7 @@ for (const enabled of [false, true]) {
   for (const recordingActive of [false, true]) {
     for (const transport of ["fetch", "XHR"]) {
       test(transport + " Active=" + enabled + " Recording=" + recordingActive + " keeps observation independent", async () => {
-        const recording = recordingActive ? { active: true, name: "Matrix", flowId: "matrix", captured: [], monitorScope: { type: "global" }, apiOrigin: "https://api.example.com" } : null;
+        const recording = recordingActive ? { active: true, name: "Matrix", flowId: "matrix", captured: [], monitorScope: { type: "global" } } : null;
         const nativeResponse = { status: 200, headers: new Headers({ "content-type": "text/plain" }), clone: () => ({ text: async () => "REAL" }) };
         const { sandbox, calls } = buildPageContext({ enabled, rules: [RULE], recording }, nativeResponse);
         await new Promise(resolve => setTimeout(resolve, 0));

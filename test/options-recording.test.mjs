@@ -281,7 +281,6 @@ for (const mode of ["site", "page", "global"]) {
     ctx.click("#record-new-flow");
     ctx.setInput("#record-setup-name", "Test Recording");
     ctx.setInput("#record-setup-domain", "https://myapp.example.com:443/accounts?query=ignored#hash");
-    ctx.setInput("#record-setup-api-domain", "api.example.com");
     ctx.setInput("input[name='monitor-mode']:checked", mode);
     ctx.click("#record-setup-start");
     const saved = ctx.getStoredData();
@@ -291,7 +290,6 @@ for (const mode of ["site", "page", "global"]) {
     assert.ok(saved.recording.startedAt > 0);
     const expectedScope = mode === "global" ? { type: mode } : { type: mode, origin: "https://myapp.example.com", ...(mode === "page" ? { pathname: "/accounts" } : {}) };
     assert.deepEqual(JSON.parse(JSON.stringify(saved.recording.monitorScope)), expectedScope);
-    assert.equal(saved.recording.apiOrigin, "https://api.example.com");
     assert.deepEqual(saved.flows, [existing]);
     assert.equal(saved.activeFlowId, "existing");
     ctx.rerenderRoute();

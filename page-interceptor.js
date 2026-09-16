@@ -59,10 +59,7 @@
   const shouldCaptureForRecording = (currentPage, recording) => {
     if (!recording?.active) return false;
     if (!scopeMatches(recording.monitorScope, currentPage)) return false;
-    // Old transient recording sessions have no API filter and retain their original
-    // unrestricted capture behavior. New sessions compare parsed origins exactly.
-    if (!recording.apiOrigin || !currentPage?.requestUrl) return true;
-    try { return new URL(currentPage.requestUrl).origin === recording.apiOrigin; } catch { return false; }
+    return true;
   };
 
   const storageRecord = (record) => {

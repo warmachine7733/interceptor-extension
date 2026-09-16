@@ -43,9 +43,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!sender.url) return;
     const url = new URL(sender.url);
     if (!['http:', 'https:'].includes(url.protocol) || !watchedHosts.includes(url.host)) return;
-    // Defense in depth: validate the destination again in the sole storage writer.
-    // Sessions created before apiOrigin existed remain compatible and unrestricted.
-    if (recording.apiOrigin && new URL(record.url).origin !== recording.apiOrigin) return;
     const captured = Array.isArray(recording.captured) ? recording.captured : [];
     if (captured.some((item) => item.id === record.id)) return;
     await chrome.storage.local.set({ recording: { ...recording, captured: [...captured, record] } });

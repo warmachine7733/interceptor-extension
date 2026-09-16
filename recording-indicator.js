@@ -32,7 +32,7 @@
       document.documentElement.appendChild(host);
     }
     name.textContent = recording.name || 'Recording';
-    count.textContent = `${recording.apiOrigin ? `API: ${new URL(recording.apiOrigin).host} · ` : ""}${recording.captured?.length || 0} captured`;
+    count.textContent = `${recording.captured?.length || 0} captured`;
   };
   window.addEventListener('message', event => {
     if (event.source !== window || event.data?.source !== 'local-api-mock' || event.data.type !== 'config') return;

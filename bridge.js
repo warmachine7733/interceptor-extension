@@ -4,8 +4,13 @@
   const pageIsWatched = () => {
     try { const url = new URL(location.href); return ['http:', 'https:'].includes(url.protocol) && watchedHosts.has(url.host); } catch { return false; }
   };
+  let configGeneration = 0;
   const sendConfig = () => {
+    const generation = ++configGeneration;
     chrome.storage.local.get({ enabled: false, watchedHosts: [], rules: [], flows: [], activeFlowId: null, recording: null }, (saved) => {
+      // storage.get is asynchronous. A slower earlier read must not overwrite a
+      // newer Flow enable/save update in the page interceptor.
+      if (generation !== configGeneration) return;
       config = saved;
       watchedHosts = new Set(normalizeHosts(saved.watchedHosts));
       window.postMessage({ source: "local-api-mock", type: "config", config: saved }, "*");

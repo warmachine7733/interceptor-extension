@@ -376,11 +376,11 @@ function createBlankFlow() {
 // shouldCaptureForRecording in page-interceptor.js) - it has no effect on My Mocks or on
 // replaying any Flow. When called with no name (legacy/no-UI callers), falls back to the
 // original prompt-based flow with an unrestricted (global) monitor, matching old behavior.
-function startRecordingFlow(name, monitorScope, apiOrigin) {
+function startRecordingFlow(name, monitorScope) {
   const flowName = name !== undefined ? name : window.prompt("Flow name", state.recording?.name || "Successful Checkout");
   if (!flowName || !String(flowName).trim()) return;
   if (!leaveFlowDraft()) return;
-  state.recording = { active: true, name: String(flowName).trim(), captured: [], startedAt: Date.now(), flowId: crypto.randomUUID(), monitorScope: monitorScope || { type: "global" }, ...(apiOrigin ? { apiOrigin } : {}) };
+  state.recording = { active: true, name: String(flowName).trim(), captured: [], startedAt: Date.now(), flowId: crypto.randomUUID(), monitorScope: monitorScope || { type: "global" } };
   state.recordSetup = null;
   state.flowEditorId = null;
   state.view = "flows";
@@ -414,11 +414,6 @@ function normalizeMonitorTarget(rawValue) {
   if (!["http:", "https:"].includes(url.protocol)) return { error: "Only http/https domains can be monitored." };
   return { origin: url.origin, pathname: url.pathname || "/" };
 }
-function normalizeApiOrigin(rawValue) {
-  const normalized = normalizeMonitorTarget(rawValue);
-  if (normalized.error) return { error: normalized.error.replace("domain or app URL", "API domain") };
-  return { origin: normalized.origin };
-}
 // Lenient convenience wrapper (falls back to global instead of erroring) - used by callers
 // that don't have an inline error UI. `domainValue` defaults to the last known app tab.
 function buildMonitorScope(captureScopeType, domainValue) {
@@ -433,12 +428,9 @@ function confirmRecordSetup() {
   const name = nameInput ? nameInput.value : "";
   if (!name || !String(name).trim()) { state.recordSetup = { open: true, error: "Enter a flow name." }; render(); return; }
   const captureScopeType = $("input[name='monitor-mode']:checked")?.value || "site";
-  const apiInput = $("#record-setup-api-domain");
-  const api = normalizeApiOrigin(apiInput ? apiInput.value : "");
-  if (api.error) { state.recordSetup = { open: true, error: api.error }; render(); return; }
   if (captureScopeType === "global") {
     state.recordSetup = null;
-    startRecordingFlow(String(name).trim(), { type: "global" }, api.origin);
+    startRecordingFlow(String(name).trim(), { type: "global" });
     return;
   }
   const domainInput = $("#record-setup-domain");
@@ -446,7 +438,7 @@ function confirmRecordSetup() {
   if (normalized.error) { state.recordSetup = { open: true, error: normalized.error }; render(); return; }
   const monitorScope = captureScopeType === "page" ? { type: "page", origin: normalized.origin, pathname: normalized.pathname } : { type: "site", origin: normalized.origin };
   state.recordSetup = null;
-  startRecordingFlow(String(name).trim(), monitorScope, api.origin);
+  startRecordingFlow(String(name).trim(), monitorScope);
 }
 
 function stopRecordingFlow() {
@@ -599,9 +591,9 @@ function renderRecordSetup() {
     : `<div class="record-setup-current-tab record-setup-unavailable">Current application unavailable</div>`;
   const errorLine = setup.error ? `<div class="record-setup-error">${esc(setup.error)}</div>` : "";
   rulesElement.innerHTML = `<section class="record-setup">
-    <div class="record-setup-header"><h2>Record Flow</h2><p>Choose the application where recording runs and the API destination to capture.</p></div>
+    <div class="record-setup-header"><h2>Record Flow</h2><p>Choose a name and which application to monitor.</p></div>
     <label class="record-setup-field">Flow name<input id="record-setup-name" type="text" value="${esc(suggestedName)}" placeholder="e.g. PC Collections"></label>
-    <label class="record-setup-field"><span>Application / Page to monitor</span><small>Controls where recording is active.</small><input id="record-setup-domain" type="text" value="${esc(domainDefault)}" placeholder="https://myapp.company.com"></label>
+    <label class="record-setup-field">Domain / App URL to monitor<input id="record-setup-domain" type="text" value="${esc(domainDefault)}" placeholder="https://myapp.company.com"></label>
     ${currentTabLine}
     <div class="record-setup-field">
       <span class="record-setup-label">Capture scope</span>
@@ -609,7 +601,6 @@ function renderRecordSetup() {
       <label class="record-setup-radio"><input type="radio" name="monitor-mode" value="page"> Exact page</label>
       <label class="record-setup-radio"><input type="radio" name="monitor-mode" value="global"> Global</label>
     </div>
-    <label class="record-setup-field"><span>API Domain to capture</span><small>Controls which API requests are captured.</small><input id="record-setup-api-domain" type="text" placeholder="https://api.example.com"></label>
     ${errorLine}
     <div class="record-setup-actions">
       <button id="record-setup-start" class="btn btn-primary" type="button">Start Recording</button>
@@ -662,10 +653,9 @@ function renderRecordingBanner(recording) {
     ? `<div class="recording-banner-row"><span class="recording-banner-key">Monitoring</span><span class="recording-banner-value">Global</span></div>`
     : `<div class="recording-banner-row"><span class="recording-banner-key">Monitoring ${scope.type === "page" ? "page" : "domain"}</span><span class="recording-banner-value">${esc(scope.origin)}${scope.type === "page" ? esc(scope.pathname || "") : ""}</span></div>`;
   const pageRow = `<div class="recording-banner-row"><span class="recording-banner-key">Current page</span><span class="recording-banner-value">${esc(currentPageLabel)}</span></div>`;
-  const apiRow = recording.apiOrigin ? `<div class="recording-banner-row"><span class="recording-banner-key">API domain</span><span class="recording-banner-value">${esc(recording.apiOrigin)}</span></div>` : "";
   const pausedRow = outside ? `<div class="recording-banner-warning">Outside monitored ${scope.type === "page" ? "page" : "domain"} — capture paused</div>` : "";
   const countRow = `<div class="recording-banner-row"><span class="recording-banner-key">Captured</span><span class="recording-banner-value">${(recording.captured || []).length} request${(recording.captured || []).length === 1 ? "" : "s"}</span></div>`;
-  return `<div class="recording-banner"><div class="recording-banner-info"><strong>● Recording "${esc(recording.name || "Unnamed flow")}"</strong><div class="recording-banner-meta">${monitorRow}${pageRow}${apiRow}${pausedRow}${countRow}<div class="recording-banner-row"><span class="recording-banner-key">Mocking</span><span class="recording-banner-value">${state.enabled ? "On" : "Off"}</span></div></div></div><div class="recording-banner-actions"><button id="stop-recording" class="btn btn-primary" type="button">Stop & Review</button><button id="cancel-recording" class="btn-cancel-recording" type="button">Cancel Recording</button></div></div>`;
+  return `<div class="recording-banner"><div class="recording-banner-info"><strong>● Recording "${esc(recording.name || "Unnamed flow")}"</strong><div class="recording-banner-meta">${monitorRow}${pageRow}${pausedRow}${countRow}<div class="recording-banner-row"><span class="recording-banner-key">Mocking</span><span class="recording-banner-value">${state.enabled ? "On" : "Off"}</span></div></div></div><div class="recording-banner-actions"><button id="stop-recording" class="btn btn-primary" type="button">Stop & Review</button><button id="cancel-recording" class="btn-cancel-recording" type="button">Cancel Recording</button></div></div>`;
 }
 
 function render() {
@@ -991,4 +981,4 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // Test-only hook (mirrors the ApiMockOptionsUtils pattern) so recording lifecycle
 // logic can be exercised without simulating full DOM click delegation.
-window.__flowTestHooks = { getFlowDraft, flowDraftDirty, editFlowField, saveFlowDraft, resetFlowDraft, getState: () => state, startRecordingFlow, stopRecordingFlow, cancelRecordingFlow, createBlankFlow, setView, applyRouteFromHash, openFlowEditor, closeFlowEditor, deleteFlow, toggleFlow, flowOrigin, observedOrigins, flowExportPayload, importFlowsPayload, setFlowSiteFilter: (value) => { state.flowSiteFilter = value; render(); }, openRecordSetup, closeRecordSetup, confirmRecordSetup, buildMonitorScope, normalizeMonitorTarget, normalizeApiOrigin, flowStepMatchesSearch };
+window.__flowTestHooks = { getFlowDraft, flowDraftDirty, editFlowField, saveFlowDraft, resetFlowDraft, getState: () => state, startRecordingFlow, stopRecordingFlow, cancelRecordingFlow, createBlankFlow, setView, applyRouteFromHash, openFlowEditor, closeFlowEditor, deleteFlow, toggleFlow, flowOrigin, observedOrigins, flowExportPayload, importFlowsPayload, setFlowSiteFilter: (value) => { state.flowSiteFilter = value; render(); }, openRecordSetup, closeRecordSetup, confirmRecordSetup, buildMonitorScope, normalizeMonitorTarget, flowStepMatchesSearch };

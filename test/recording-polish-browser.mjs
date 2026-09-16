@@ -69,7 +69,6 @@ try {
   await options.locator('#record-new-flow').click();
   await options.locator('#record-setup-name').fill('Exact page');
   await options.locator('#record-setup-domain').fill(`${origin}/profile`);
-  await options.locator('#record-setup-api-domain').fill(origin);
   await options.locator('input[value="page"]').check();
   await options.locator('#record-setup-start').click();
   await app.waitForFunction(() => document.querySelector('#local-api-mock-rec-indicator'));

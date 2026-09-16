@@ -11,6 +11,19 @@
   const normalizeHosts = values => [...new Set((Array.isArray(values) ? values : []).map(normalizeHost).filter(Boolean))];
   const normalizeMethod = (method) => String(method || "*").trim().toUpperCase();
   const normalizeUrl = (url) => String(url ?? "").trim().replace(/%2C/gi, ",");
+  // URL matching is based on origin + pathname only. Query keys, query values, and
+  // fragments are intentionally non-binding for both My Mocks and Flow replay.
+  const normalizeUrlWithoutQuery = (url) => {
+    const value = normalizeUrl(url);
+    try {
+      const parsed = new URL(value);
+      parsed.search = "";
+      parsed.hash = "";
+      return parsed.href;
+    } catch {
+      return value.replace(/[?#].*$/, "");
+    }
+  };
 
   const patternToRegex = (pattern) => {
     const value = normalizeUrl(pattern || "*");
@@ -36,14 +49,12 @@
   const matches = (rule, url, method) => {
     if (!rule?.enabled) return false;
     const pattern = String(rule.match?.urlPattern || "*").trim();
-    if (!patternToRegex(pattern).test(normalizeUrl(url))) return false;
+    if (!patternToRegex(normalizeUrlWithoutQuery(pattern)).test(normalizeUrlWithoutQuery(url))) return false;
     const expectedMethod = normalizeMethod(rule.match?.method);
     return expectedMethod === "*" || expectedMethod === normalizeMethod(method);
   };
 
   const firstMatch = (rules, url, method) => (rules || []).find((rule) => matches(rule, url, method)) || null;
-
-  const stripQuery = (value) => String(value ?? "").split("?")[0];
 
   const normalizeBodyForCompare = (value) => {
     if (value === undefined || value === null || value === "") return "";
@@ -61,10 +72,7 @@
   const flowStepMatches = (step, url, method, body, pageContext) => {
     if (!step || step.enabled === false) return false;
     const pattern = String(step?.matcher?.urlPattern || "*").trim();
-    const matchQuery = Boolean(step?.matcher?.matchQuery);
-    const compareUrl = matchQuery ? normalizeUrl(url) : stripQuery(normalizeUrl(url));
-    const comparePattern = matchQuery ? pattern : stripQuery(pattern);
-    if (!patternToRegex(comparePattern).test(compareUrl)) return false;
+    if (!patternToRegex(normalizeUrlWithoutQuery(pattern)).test(normalizeUrlWithoutQuery(url))) return false;
     const expectedMethod = normalizeMethod(step?.matcher?.method);
     if (expectedMethod !== "*" && expectedMethod !== normalizeMethod(method)) return false;
     if (step.pageContext && !scopeMatches({ type: "page", origin: step.pageContext.origin, pathname: step.pageContext.pathname }, pageContext)) return false;
@@ -87,7 +95,7 @@
       if (!matchingSteps.length) continue;
       let counts = flowReplayCounts.get(flow.id);
       if (!counts) { counts = new Map(); flowReplayCounts.set(flow.id, counts); }
-      const key = `${normalizeMethod(method)}::${normalizeUrl(url)}`;
+      const key = `${normalizeMethod(method)}::${normalizeUrlWithoutQuery(url)}`;
       const callIndex = counts.get(key) || 0;
       counts.set(key, callIndex + 1);
       const step = matchingSteps[Math.min(callIndex, matchingSteps.length - 1)];

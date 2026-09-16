@@ -5,8 +5,18 @@
 
 
 
+
+
+## 1.2.7
+- Make query parameter keys and values non-binding for mock and Flow URL matching
+
+## 1.2.6
+- Normalize query-less mock and Flow URL matching and prevent stale Flow config updates
+
 ## 1.2.5
 - Add API-domain recording filters and Flow-specific aggregated notifications
+- Ignore request query strings and fragments for query-less mock and Flow URL patterns.
+- Prevent stale asynchronous bridge configuration reads from overwriting newer Flow state.
 
 ## 1.2.4
 - Keep each mock's published response tab independent and restore it after reload.

@@ -24,20 +24,34 @@ test("matches stylesheet requests as GET requests", () => {
 	assert.equal(firstMatch([stylesheetRule], "https://cdn.example.com/styles/site.css", "GET"), stylesheetRule);
 });
 test("does not match a different method", () => assert.equal(firstMatch([rule], "https://api.example.com/users/42", "POST"), null));
-test("matches URL patterns containing query params", () => {
+test("query strings in saved patterns are non-binding", () => {
 	assert.equal(firstMatch([queryRule], "https://api.example.com/users?id=42", "GET"), queryRule);
-	assert.equal(firstMatch([queryRule], "https://api.example.com/users", "GET"), null);
+	assert.equal(firstMatch([queryRule], "https://api.example.com/users", "GET"), queryRule);
+	assert.equal(firstMatch([queryRule], "https://api.example.com/users?page=2&limit=20", "GET"), queryRule);
 	const wildcardQueryRule = { ...rule, match: { ...rule.match, urlPattern: "https://api.example.com/users/*?active=*" } };
-	assert.equal(firstMatch([wildcardQueryRule], "https://api.example.com/users/42?active=true", "GET"), wildcardQueryRule);
+	assert.equal(firstMatch([wildcardQueryRule], "https://api.example.com/users/42?inactive=true", "GET"), wildcardQueryRule);
 });
 test("matches an exact path when the request adds a query string", () => {
 	const pathRule = { enabled: true, match: { urlPattern: "https://jsonplaceholder.typicode.com/posts/1", method: "GET" } };
-	assert.equal(firstMatch([pathRule], "https://jsonplaceholder.typicode.com/posts/1?test=1234", "GET"), null);
+	assert.equal(firstMatch([pathRule], "https://jsonplaceholder.typicode.com/posts/1?test=1234", "GET"), pathRule);
+	assert.equal(firstMatch([pathRule], "https://jsonplaceholder.typicode.com/posts/1#details", "GET"), pathRule);
 });
-test("matches wildcard query patterns", () => {
+test("query-less manual and Flow patterns ignore request query/hash but preserve path, host, port, and method", () => {
+	const exactRule = { enabled: true, match: { urlPattern: "https://api.example.com/users", method: "GET" } };
+	const exactFlow = { id: "query-normalized", enabled: true, steps: [{ id: "users", matcher: { method: "GET", urlPattern: "https://api.example.com/users", matchQuery: true }, response: { body: "flow" } }] };
+	for (const suffix of ["?page=1", "?page=2&limit=20", "?timestamp=random", "#top"]) {
+		assert.equal(firstMatch([exactRule], `https://api.example.com/users${suffix}`, "GET"), exactRule);
+		assert.equal(firstFlowMatch([exactFlow], `https://api.example.com/users${suffix}`, "GET").response.body, "flow");
+	}
+	assert.equal(firstMatch([exactRule], "https://api.example.com/users/2?id=1", "GET"), null);
+	assert.equal(firstMatch([exactRule], "https://other.example.com/users?page=1", "GET"), null);
+	assert.equal(firstMatch([exactRule], "https://api.example.com:8443/users?page=1", "GET"), null);
+	assert.equal(firstMatch([exactRule], "https://api.example.com/users?page=1", "POST"), null);
+});
+test("query strings do not constrain wildcard path patterns", () => {
 	const pathRule = { enabled: true, match: { urlPattern: "https://jsonplaceholder.typicode.com/posts/*", method: "GET" } };
 	const queryPathRule = { ...pathRule, match: { ...pathRule.match, urlPattern: "https://jsonplaceholder.typicode.com/posts/*?test=*" } };
-	assert.equal(firstMatch([queryPathRule], "https://jsonplaceholder.typicode.com/posts/1?test=1234", "GET"), queryPathRule);
+	assert.equal(firstMatch([queryPathRule], "https://jsonplaceholder.typicode.com/posts/1?other=value", "GET"), queryPathRule);
 });
 test("matches comma-separated query values", () => {
 	const commaRule = { enabled: true, match: { urlPattern: "https://jsonplaceholder.typicode.com/posts/1?test=1234,123", method: "GET" } };
@@ -105,7 +119,7 @@ test("ignores disabled flow steps", () => {
 	assert.equal(firstFlowMatch([stepFlow], "https://api.example.com/disabled", "GET"), null);
 });
 
-test("matchQuery false ignores query strings on both sides", () => {
+test("Flow query strings are non-binding regardless of legacy matchQuery", () => {
 	const noQueryFlow = {
 		id: "flow-no-query",
 		enabled: true,
@@ -115,14 +129,14 @@ test("matchQuery false ignores query strings on both sides", () => {
 	assert.equal(firstFlowMatch([noQueryFlow], "https://api.example.com/search", "GET").response.body, "results");
 });
 
-test("matchQuery true requires the query string to match", () => {
+test("legacy matchQuery true no longer constrains Flow URL matching", () => {
 	const queryFlow = {
 		id: "flow-query",
 		enabled: true,
 		steps: [{ id: "q1", matcher: { method: "GET", urlPattern: "https://api.example.com/search?q=cats", matchQuery: true }, response: { body: "results" } }]
 	};
 	assert.equal(firstFlowMatch([queryFlow], "https://api.example.com/search?q=cats", "GET").response.body, "results");
-	assert.equal(firstFlowMatch([queryFlow], "https://api.example.com/search?q=dogs", "GET"), null);
+	assert.equal(firstFlowMatch([queryFlow], "https://api.example.com/search?q=dogs", "GET").response.body, "results");
 });
 
 test("matchBody distinguishes POST requests with different bodies", () => {
@@ -134,7 +148,7 @@ test("matchBody distinguishes POST requests with different bodies", () => {
 			{ id: "p2", matcher: { method: "POST", urlPattern: "https://api.example.com/cart", matchBody: true }, request: { body: '{"item":"b"}' }, response: { body: "added-b" } }
 		]
 	};
-	assert.equal(firstFlowMatch([bodyFlow], "https://api.example.com/cart", "POST", '{"item":"a"}').response.body, "added-a");
+	assert.equal(firstFlowMatch([bodyFlow], "https://api.example.com/cart?cacheBust=1", "POST", '{"item":"a"}').response.body, "added-a");
 	assert.equal(firstFlowMatch([bodyFlow], "https://api.example.com/cart", "POST", '{"item":"b"}').response.body, "added-b");
 	assert.equal(firstFlowMatch([bodyFlow], "https://api.example.com/cart", "POST", '{"item":"c"}'), null);
 });
@@ -265,5 +279,3 @@ test("sequential flow replay behavior is unaffected by page context (same page a
 	assert.equal(firstFlowMatch([repeatFlow], "https://api.company.com/ping", "GET", undefined, pageContext).response.body, "one");
 	assert.equal(firstFlowMatch([repeatFlow], "https://api.company.com/ping", "GET", undefined, pageContext).response.body, "two");
 });
-
-
