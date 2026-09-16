@@ -43,6 +43,7 @@ try {
   assert.equal((await storage()).flows?.length || 0, 0);
   await options.locator('#record-setup-name').fill('Test Recording');
   await options.locator('#record-setup-domain').fill(`${origin}/accounts?ignored=1`);
+  await options.locator('#record-setup-api-domain').fill(origin);
   await options.locator('#record-setup-start').click();
   await count(0);
   let saved = await storage();
@@ -76,6 +77,7 @@ try {
   await options.locator('#close-flow-editor').click();
   await options.locator('#record-new-flow').click();
   await options.locator('#record-setup-name').fill('Cancelled recording');
+  await options.locator('#record-setup-api-domain').fill(origin);
   await options.locator('input[value="global"]').check();
   await options.locator('#record-setup-start').click();
   await count(0);
@@ -101,6 +103,7 @@ try {
   await options.locator(`[data-flow-action="toggle"][data-flow-id="${manual.id}"]`).click();
   await options.locator('#record-new-flow').click();
   await options.locator('#record-setup-name').fill('Alongside active flow');
+  await options.locator('#record-setup-api-domain').fill(origin);
   await options.locator('input[value="global"]').check();
   await options.locator('#record-setup-start').click();
   await count(0);

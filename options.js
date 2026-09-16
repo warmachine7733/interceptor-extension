@@ -376,11 +376,11 @@ function createBlankFlow() {
 // shouldCaptureForRecording in page-interceptor.js) - it has no effect on My Mocks or on
 // replaying any Flow. When called with no name (legacy/no-UI callers), falls back to the
 // original prompt-based flow with an unrestricted (global) monitor, matching old behavior.
-function startRecordingFlow(name, monitorScope) {
+function startRecordingFlow(name, monitorScope, apiOrigin) {
   const flowName = name !== undefined ? name : window.prompt("Flow name", state.recording?.name || "Successful Checkout");
   if (!flowName || !String(flowName).trim()) return;
   if (!leaveFlowDraft()) return;
-  state.recording = { active: true, name: String(flowName).trim(), captured: [], startedAt: Date.now(), flowId: crypto.randomUUID(), monitorScope: monitorScope || { type: "global" } };
+  state.recording = { active: true, name: String(flowName).trim(), captured: [], startedAt: Date.now(), flowId: crypto.randomUUID(), monitorScope: monitorScope || { type: "global" }, ...(apiOrigin ? { apiOrigin } : {}) };
   state.recordSetup = null;
   state.flowEditorId = null;
   state.view = "flows";
@@ -414,6 +414,11 @@ function normalizeMonitorTarget(rawValue) {
   if (!["http:", "https:"].includes(url.protocol)) return { error: "Only http/https domains can be monitored." };
   return { origin: url.origin, pathname: url.pathname || "/" };
 }
+function normalizeApiOrigin(rawValue) {
+  const normalized = normalizeMonitorTarget(rawValue);
+  if (normalized.error) return { error: normalized.error.replace("domain or app URL", "API domain") };
+  return { origin: normalized.origin };
+}
 // Lenient convenience wrapper (falls back to global instead of erroring) - used by callers
 // that don't have an inline error UI. `domainValue` defaults to the last known app tab.
 function buildMonitorScope(captureScopeType, domainValue) {
@@ -428,9 +433,12 @@ function confirmRecordSetup() {
   const name = nameInput ? nameInput.value : "";
   if (!name || !String(name).trim()) { state.recordSetup = { open: true, error: "Enter a flow name." }; render(); return; }
   const captureScopeType = $("input[name='monitor-mode']:checked")?.value || "site";
+  const apiInput = $("#record-setup-api-domain");
+  const api = normalizeApiOrigin(apiInput ? apiInput.value : "");
+  if (api.error) { state.recordSetup = { open: true, error: api.error }; render(); return; }
   if (captureScopeType === "global") {
     state.recordSetup = null;
-    startRecordingFlow(String(name).trim(), { type: "global" });
+    startRecordingFlow(String(name).trim(), { type: "global" }, api.origin);
     return;
   }
   const domainInput = $("#record-setup-domain");
@@ -438,7 +446,7 @@ function confirmRecordSetup() {
   if (normalized.error) { state.recordSetup = { open: true, error: normalized.error }; render(); return; }
   const monitorScope = captureScopeType === "page" ? { type: "page", origin: normalized.origin, pathname: normalized.pathname } : { type: "site", origin: normalized.origin };
   state.recordSetup = null;
-  startRecordingFlow(String(name).trim(), monitorScope);
+  startRecordingFlow(String(name).trim(), monitorScope, api.origin);
 }
 
 function stopRecordingFlow() {
@@ -513,6 +521,11 @@ function deleteFlow(flowId) {
 function flowEndpoint(url) {
   try { return new URL(url).pathname || "/"; } catch { return String(url || "*").split(/[?#]/)[0]; }
 }
+function flowStepMatchesSearch(step, query) {
+  const needle = String(query || "").trim().toLowerCase();
+  return !needle || [step?.matcher?.method, step?.matcher?.urlPattern, step?.request?.url, step?.pageContext?.origin, step?.pageContext?.pathname, step?.response?.status]
+    .some((value) => String(value || "").toLowerCase().includes(needle));
+}
 const flowIcon = (path) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="' + path + '"></path></svg>';
 function renderFlowEditor(flow) {
   const safeFlow = { ...(getFlowDraft() || normalizeFlow(flow)), enabled: flow.enabled };
@@ -520,7 +533,7 @@ function renderFlowEditor(flow) {
   const selectedIndex = Math.min(Number(state.flowSelectedStepIndex || 0), Math.max(safeFlow.steps.length - 1, 0));
   const selectedStep = safeFlow.steps[selectedIndex] || null;
   const query = flowStepSearch.trim().toLowerCase();
-  const visibleSteps = safeFlow.steps.map((step, index) => ({ step, index })).filter(({ step }) => !query || [step.matcher?.method, step.matcher?.urlPattern, step.request?.url, step.pageContext?.origin, step.pageContext?.pathname].some((value) => String(value || "").toLowerCase().includes(query)));
+  const visibleSteps = safeFlow.steps.map((step, index) => ({ step, index })).filter(({ step }) => flowStepMatchesSearch(step, query));
   const stepsHtml = visibleSteps.map(({ step, index }) => `<div class="flow-step-item ${index === selectedIndex ? "selected" : ""}"><input class="flow-step-toggle" type="checkbox" data-step-toggle="${index}" ${step.enabled === false ? "" : "checked"} aria-label="Toggle step ${index + 1}"><button class="flow-step-select" data-step-select="${index}" type="button" aria-current="${index === selectedIndex ? "step" : "false"}"><span class="flow-step-number">${String(index + 1).padStart(2, "0")}</span><span class="flow-step-meta-text"><span class="method-text ${methodClass(step.matcher?.method)}">${esc(step.matcher?.method || "GET")}</span><span class="flow-step-path" title="${esc(step.matcher?.urlPattern || step.request?.url)}">${esc(flowEndpoint(step.matcher?.urlPattern || step.request?.url))}</span>${step.pageContext?.origin ? `<span class="flow-step-route" title="${esc(step.pageContext.origin)}${esc(step.pageContext.pathname)}">Page ${esc(step.pageContext.pathname || "/")}</span>` : ""}</span><span class="flow-step-status">${esc(step.response?.status || 200)}</span></button></div>`).join("");
 
   const inspector = selectedStep ? `
@@ -586,9 +599,9 @@ function renderRecordSetup() {
     : `<div class="record-setup-current-tab record-setup-unavailable">Current application unavailable</div>`;
   const errorLine = setup.error ? `<div class="record-setup-error">${esc(setup.error)}</div>` : "";
   rulesElement.innerHTML = `<section class="record-setup">
-    <div class="record-setup-header"><h2>Record Flow</h2><p>Choose a name and which application to monitor.</p></div>
+    <div class="record-setup-header"><h2>Record Flow</h2><p>Choose the application where recording runs and the API destination to capture.</p></div>
     <label class="record-setup-field">Flow name<input id="record-setup-name" type="text" value="${esc(suggestedName)}" placeholder="e.g. PC Collections"></label>
-    <label class="record-setup-field">Domain / App URL to monitor<input id="record-setup-domain" type="text" value="${esc(domainDefault)}" placeholder="https://myapp.company.com"></label>
+    <label class="record-setup-field"><span>Application / Page to monitor</span><small>Controls where recording is active.</small><input id="record-setup-domain" type="text" value="${esc(domainDefault)}" placeholder="https://myapp.company.com"></label>
     ${currentTabLine}
     <div class="record-setup-field">
       <span class="record-setup-label">Capture scope</span>
@@ -596,6 +609,7 @@ function renderRecordSetup() {
       <label class="record-setup-radio"><input type="radio" name="monitor-mode" value="page"> Exact page</label>
       <label class="record-setup-radio"><input type="radio" name="monitor-mode" value="global"> Global</label>
     </div>
+    <label class="record-setup-field"><span>API Domain to capture</span><small>Controls which API requests are captured.</small><input id="record-setup-api-domain" type="text" placeholder="https://api.example.com"></label>
     ${errorLine}
     <div class="record-setup-actions">
       <button id="record-setup-start" class="btn btn-primary" type="button">Start Recording</button>
@@ -648,9 +662,10 @@ function renderRecordingBanner(recording) {
     ? `<div class="recording-banner-row"><span class="recording-banner-key">Monitoring</span><span class="recording-banner-value">Global</span></div>`
     : `<div class="recording-banner-row"><span class="recording-banner-key">Monitoring ${scope.type === "page" ? "page" : "domain"}</span><span class="recording-banner-value">${esc(scope.origin)}${scope.type === "page" ? esc(scope.pathname || "") : ""}</span></div>`;
   const pageRow = `<div class="recording-banner-row"><span class="recording-banner-key">Current page</span><span class="recording-banner-value">${esc(currentPageLabel)}</span></div>`;
+  const apiRow = recording.apiOrigin ? `<div class="recording-banner-row"><span class="recording-banner-key">API domain</span><span class="recording-banner-value">${esc(recording.apiOrigin)}</span></div>` : "";
   const pausedRow = outside ? `<div class="recording-banner-warning">Outside monitored ${scope.type === "page" ? "page" : "domain"} — capture paused</div>` : "";
   const countRow = `<div class="recording-banner-row"><span class="recording-banner-key">Captured</span><span class="recording-banner-value">${(recording.captured || []).length} request${(recording.captured || []).length === 1 ? "" : "s"}</span></div>`;
-  return `<div class="recording-banner"><div class="recording-banner-info"><strong>● Recording "${esc(recording.name || "Unnamed flow")}"</strong><div class="recording-banner-meta">${monitorRow}${pageRow}${pausedRow}${countRow}<div class="recording-banner-row"><span class="recording-banner-key">Mocking</span><span class="recording-banner-value">${state.enabled ? "On" : "Off"}</span></div></div></div><div class="recording-banner-actions"><button id="stop-recording" class="btn btn-primary" type="button">Stop & Review</button><button id="cancel-recording" class="btn-cancel-recording" type="button">Cancel Recording</button></div></div>`;
+  return `<div class="recording-banner"><div class="recording-banner-info"><strong>● Recording "${esc(recording.name || "Unnamed flow")}"</strong><div class="recording-banner-meta">${monitorRow}${pageRow}${apiRow}${pausedRow}${countRow}<div class="recording-banner-row"><span class="recording-banner-key">Mocking</span><span class="recording-banner-value">${state.enabled ? "On" : "Off"}</span></div></div></div><div class="recording-banner-actions"><button id="stop-recording" class="btn btn-primary" type="button">Stop & Review</button><button id="cancel-recording" class="btn-cancel-recording" type="button">Cancel Recording</button></div></div>`;
 }
 
 function render() {
@@ -901,7 +916,14 @@ $("#import-flows-file")?.addEventListener("change", (event) => {
   if (file) importFlows(file);
 });
 rulesElement.addEventListener("input", (event) => {
-  if (event.target.id === "flow-step-search") { flowStepSearch = event.target.value; render(); return; }
+  if (event.target.id === "flow-step-search") {
+    flowStepSearch = event.target.value;
+    const cursor = event.target.selectionStart;
+    render();
+    const search = $("#flow-step-search");
+    if (search) { search.focus(); search.setSelectionRange(cursor, cursor); }
+    return;
+  }
   if (event.target.dataset.stepField) { editFlowField(event.target.dataset.stepField, event.target.value); return; }
   const editor = event.target.closest(".editor");
   if (!editor || !event.target.dataset.path) return;
@@ -969,4 +991,4 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // Test-only hook (mirrors the ApiMockOptionsUtils pattern) so recording lifecycle
 // logic can be exercised without simulating full DOM click delegation.
-window.__flowTestHooks = { getFlowDraft, flowDraftDirty, editFlowField, saveFlowDraft, resetFlowDraft, getState: () => state, startRecordingFlow, stopRecordingFlow, cancelRecordingFlow, createBlankFlow, setView, applyRouteFromHash, openFlowEditor, closeFlowEditor, deleteFlow, toggleFlow, flowOrigin, observedOrigins, flowExportPayload, importFlowsPayload, setFlowSiteFilter: (value) => { state.flowSiteFilter = value; render(); }, openRecordSetup, closeRecordSetup, confirmRecordSetup, buildMonitorScope, normalizeMonitorTarget };
+window.__flowTestHooks = { getFlowDraft, flowDraftDirty, editFlowField, saveFlowDraft, resetFlowDraft, getState: () => state, startRecordingFlow, stopRecordingFlow, cancelRecordingFlow, createBlankFlow, setView, applyRouteFromHash, openFlowEditor, closeFlowEditor, deleteFlow, toggleFlow, flowOrigin, observedOrigins, flowExportPayload, importFlowsPayload, setFlowSiteFilter: (value) => { state.flowSiteFilter = value; render(); }, openRecordSetup, closeRecordSetup, confirmRecordSetup, buildMonitorScope, normalizeMonitorTarget, normalizeApiOrigin, flowStepMatchesSearch };

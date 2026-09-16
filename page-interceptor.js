@@ -58,12 +58,16 @@
   // sessions) behaves as "global" (unrestricted), same as before this feature existed.
   const shouldCaptureForRecording = (currentPage, recording) => {
     if (!recording?.active) return false;
-    return scopeMatches(recording.monitorScope, currentPage);
+    if (!scopeMatches(recording.monitorScope, currentPage)) return false;
+    // Old transient recording sessions have no API filter and retain their original
+    // unrestricted capture behavior. New sessions compare parsed origins exactly.
+    if (!recording.apiOrigin || !currentPage?.requestUrl) return true;
+    try { return new URL(currentPage.requestUrl).origin === recording.apiOrigin; } catch { return false; }
   };
 
   const storageRecord = (record) => {
     if (!config.recording?.active || !record || !pageIsWatched()) return;
-    const allowed = shouldCaptureForRecording(record.pageContext || null, config.recording);
+    const allowed = shouldCaptureForRecording({ ...record.pageContext, requestUrl: record.url }, config.recording);
     if (!allowed) return;
     window.postMessage({ source: "local-api-mock", type: "recording-capture", flowId: config.recording.flowId, record }, "*");
   };
@@ -163,6 +167,52 @@
       setTimeout(dismiss, DURATION);
     } catch { /* best-effort UI notification */ }
   };
+  // Flow replay is the only notification path that coalesces requests. Keep this
+  // separate from showRuleToast so My Mocks retain their existing lifecycle exactly.
+  const flowToastState = new Map();
+  const showFlowToast = (rule) => {
+    try {
+      const key = rule?.flowId || rule?.id;
+      if (!key) return;
+      const pending = flowToastState.get(key) || { count: 0, name: rule.name || "Unnamed flow" };
+      pending.count += 1;
+      pending.name = rule.name || pending.name;
+      clearTimeout(pending.timer);
+      pending.timer = setTimeout(() => {
+        flowToastState.delete(key);
+        if (typeof document === "undefined" || !document.documentElement) return;
+        let container = document.querySelector("#local-api-mock-flow-toasts");
+        if (!container) {
+          container = document.createElement("div");
+          container.id = "local-api-mock-flow-toasts";
+          container.style.cssText = "position:fixed;top:16px;right:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;pointer-events:none;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;";
+          (document.body || document.documentElement).appendChild(container);
+        }
+        const toast = document.createElement("div");
+        toast.style.cssText = "pointer-events:auto;cursor:pointer;min-width:210px;max-width:360px;padding:12px 14px 7px;border:1px solid rgba(74,222,128,.28);border-radius:12px;background:linear-gradient(135deg,rgba(22,101,52,.96),rgba(15,23,42,.98) 68%);color:#f8fafc;box-shadow:0 12px 30px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.09);font:13px/1.35 system-ui,-apple-system,'Segoe UI',sans-serif;opacity:0;transform:translateY(-10px) scale(.98);transition:opacity .22s ease,transform .22s ease;overflow:hidden;";
+        const title = document.createElement("div");
+        title.style.cssText = "font-weight:700;letter-spacing:-.01em;";
+        title.textContent = `✓ ${pending.name}`;
+        const detail = document.createElement("div");
+        detail.style.cssText = "display:inline-flex;margin-top:7px;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.11);color:#dcfce7;font-size:11px;font-weight:650;letter-spacing:.01em;";
+        detail.textContent = `${pending.count} API${pending.count === 1 ? "" : "s"} mocked`;
+        const bar = document.createElement("div");
+        const DURATION = 4000;
+        bar.style.cssText = `height:4px;border-radius:999px;background:linear-gradient(90deg,#86efac,#22c55e);box-shadow:0 0 10px rgba(74,222,128,.55);margin-top:11px;width:100%;transition:width ${DURATION}ms linear;`;
+        toast.append(title, detail, bar);
+        const dismiss = () => { toast.style.opacity = "0"; toast.style.transform = "translateY(-10px) scale(.98)"; setTimeout(() => toast.remove(), 250); };
+        toast.addEventListener("click", dismiss);
+        container.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = "1"; toast.style.transform = "translateY(0) scale(1)"; bar.style.width = "0%"; }, 30);
+        setTimeout(dismiss, DURATION);
+      }, 150);
+      flowToastState.set(key, pending);
+    } catch { /* best-effort UI notification */ }
+  };
+  const showMatchedToast = (rule, url, method) => {
+    if (rule?.source === "flow") showFlowToast(rule);
+    else showRuleToast(rule, url, method);
+  };
   const applyRequestOverride = async (request, override = {}) => {
     const headers = new Headers(request.headers);
     for (const [key, value] of Object.entries(parseHeaders(override.headers))) {
@@ -233,7 +283,7 @@
     const performFetch = async () => {
       log(original.method, original.url, rule);
       if (!rule) return pass();
-      showRuleToast(rule, original.url, original.method);
+      showMatchedToast(rule, original.url, original.method);
       const request = await applyRequestOverride(original, rule.request);
       const response = responseForRule(rule);
       if (response?.enabled) return mockResponse(response);
@@ -343,7 +393,7 @@
     const rule = config.enabled ? details.manualRule || matchingRule(details.url, details.method, bodyForMatch) : null;
     if (details) log(details.method, details.url, rule || null);
     if (!rule) return nativeSend.call(this, body);
-    showRuleToast(rule, details.url, details.method);
+    showMatchedToast(rule, details.url, details.method);
     for (const [name, value] of Object.entries(parseHeaders(rule.request?.headers))) {
       if (value !== null && value !== "" && !details.overriddenHeaders?.has(name.toLowerCase())) nativeSetRequestHeader.call(this, name, String(value));
     }

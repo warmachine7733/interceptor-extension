@@ -47,6 +47,18 @@ function buildPageContext(config, nativeFetchResult = "NATIVE", locationOverride
   config = { watchedHosts: [new URL(locationOverrides.href || locationOverrides.origin || 'https://app.example.com').host], ...config };
   const listeners = {};
   const calls = { nativeFetch: [] };
+  const toastElements = [];
+  const makeToastElement = () => ({
+    style: {}, children: [], textContent: "", id: "", isConnected: true,
+    append(...children) { this.children.push(...children); },
+    appendChild(child) { this.children.push(child); if (child.id) toastElements.push(child); },
+    addEventListener() {}, remove() { this.isConnected = false; }
+  });
+  const toastDocument = config.toastTest ? {
+    documentElement: makeToastElement(), body: makeToastElement(),
+    createElement: makeToastElement,
+    querySelector(selector) { return selector === "#local-api-mock-flow-toasts" ? toastElements.find(element => element.id === "local-api-mock-flow-toasts") || null : null; }
+  } : undefined;
 
   class FakeRequest {
     constructor(input, init = {}) {
@@ -72,11 +84,11 @@ function buildPageContext(config, nativeFetchResult = "NATIVE", locationOverride
   }
 
   const sandbox = {
-    console, setTimeout, URL, RegExp, JSON, Object, Number, String, Promise, Error, WeakMap, Set, Map, Array,
+    console, setTimeout, clearTimeout, URL, RegExp, JSON, Object, Number, String, Promise, Error, WeakMap, Set, Map, Array,
     Request: FakeRequest, Response: FakeResponse, Headers: FakeHeaders,
     Event: class { constructor(type) { this.type = type; } },
     location: { href: "https://app.example.com/", origin: "https://app.example.com", pathname: "/", ...locationOverrides, href: locationOverrides.href || `${locationOverrides.origin || 'https://app.example.com'}${locationOverrides.pathname || '/'}` },
-    crypto: { randomUUID: () => `id-${Math.random().toString(36).slice(2)}` },
+    crypto: { randomUUID: () => `id-${Math.random().toString(36).slice(2)}` }, document: toastDocument
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
@@ -152,6 +164,8 @@ function buildPageContext(config, nativeFetchResult = "NATIVE", locationOverride
   // Inside the vm, `window` resolves to the contextified global, which is not
   // reference-equal to `sandbox`; the interceptor checks `event.source === window`.
   sandbox.__vmWindow = vm.runInContext("window", sandbox);
+  calls.flowToasts = () => toastElements.find(element => element.id === "local-api-mock-flow-toasts")?.children || [];
+  calls.pageToastContainers = () => toastDocument?.body.children || [];
   return { sandbox, calls };
 }
 
@@ -162,6 +176,39 @@ test("fetch is intercepted and mocked", async () => {
   assert.equal(calls.nativeFetch.length, 0, "native fetch should NOT be called");
   const body = await res.text();
   assert.equal(body, '{"mocked":true}');
+});
+
+test("Flow replay aggregates a burst by flow while My Mocks keep their individual toasts", async () => {
+  const flow = {
+    id: "pc-auth", name: "PC Auth", enabled: true,
+    steps: ["profile", "address", "preferences"].map((path, index) => ({ id: path, order: index, enabled: true, matcher: { method: "GET", urlPattern: `https://api.example.com/${path}` }, response: { status: 200, body: path } }))
+  };
+  const manual = { ...RULE, match: { method: "GET", urlPattern: "https://api.example.com/manual-*" } };
+  const { sandbox, calls } = buildPageContext({ enabled: true, toastTest: true, rules: [manual], flows: [flow] });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  for (const path of ["profile", "address", "preferences"]) await sandbox.fetch(`https://api.example.com/${path}`);
+  await sandbox.fetch("https://api.example.com/manual-one");
+  await sandbox.fetch("https://api.example.com/manual-two");
+  await new Promise(resolve => setTimeout(resolve, 190));
+  const flowToasts = calls.flowToasts();
+  assert.equal(flowToasts.length, 1);
+  assert.equal(flowToasts[0].children[0].textContent, "✓ PC Auth");
+  assert.equal(flowToasts[0].children[1].textContent, "3 APIs mocked");
+  const mockContainer = calls.pageToastContainers().find(container => container.id !== "local-api-mock-flow-toasts");
+  assert.equal(mockContainer.children.length, 2, "My Mocks remain individual and are not absorbed by Flow aggregation");
+  assert.equal(await (await sandbox.fetch("https://api.example.com/profile")).text(), "profile", "presentation does not affect replay responses");
+  await new Promise(resolve => setTimeout(resolve, 190));
+  assert.equal(calls.flowToasts().length, 2, "a later Flow burst gets a new snackbar");
+});
+
+test("different Flows and a single Flow request each produce independent Flow snackbars", async () => {
+  const makeFlow = (id, name) => ({ id, name, enabled: true, steps: [{ id: `${id}-step`, enabled: true, matcher: { method: "GET", urlPattern: `https://api.example.com/${id}` }, response: { status: 200, body: id } }] });
+  const { sandbox, calls } = buildPageContext({ enabled: true, toastTest: true, rules: [], flows: [makeFlow("auth", "PC Auth"), makeFlow("checkout", "Checkout")] });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await sandbox.fetch("https://api.example.com/auth");
+  await sandbox.fetch("https://api.example.com/checkout");
+  await new Promise(resolve => setTimeout(resolve, 190));
+  assert.deepEqual(Array.from(calls.flowToasts(), toast => [toast.children[0].textContent, toast.children[1].textContent]), [["✓ PC Auth", "1 API mocked"], ["✓ Checkout", "1 API mocked"]]);
 });
 
 test("fetch uses the published response variant by default", async () => {
@@ -552,8 +599,8 @@ test("switching the current page/site does not affect manual mock matching at al
 
 // --- Record Flow capture filter (recording only - never affects mocks/replay) ---
 
-function recordingConfig(monitorScope) {
-  return { enabled: true, rules: [], recording: { active: true, name: "Journey", captured: [], startedAt: Date.now(), flowId: "rec-filter", monitorScope } };
+function recordingConfig(monitorScope, apiOrigin) {
+  return { enabled: true, rules: [], recording: { active: true, name: "Journey", captured: [], startedAt: Date.now(), flowId: "rec-filter", monitorScope, ...(apiOrigin ? { apiOrigin } : {}) } };
 }
 const fakeOkResponse = { status: 200, headers: { get: () => null }, clone: () => ({ text: async () => "ok" }) };
 
@@ -604,15 +651,25 @@ test("Global monitor captures regardless of the current page", async () => {
   assert.equal(lastWrite.recording.captured.length, 1);
 });
 
-test("Entire domain scope captures requests to any API host, as long as the generating PAGE matches - page domain != API domain", async () => {
-  const { sandbox, calls } = buildPageContext(recordingConfig({ type: "site", origin: "https://app.company.com" }), fakeOkResponse, { origin: "https://app.company.com", pathname: "/accounts" });
+test("recording captures only its configured API origin after the monitored page scope matches", async () => {
+  const { sandbox, calls } = buildPageContext(recordingConfig({ type: "site", origin: "https://app.company.com" }, "https://api.company.com"), fakeOkResponse, { origin: "https://app.company.com", pathname: "/accounts" });
   await new Promise((r) => setTimeout(r, 0));
   await sandbox.fetch("https://api.company.com/profile");
+  await sandbox.fetch("https://api.company.com/orders?view=all#recent");
+  await sandbox.fetch("https://api.company.com.evil.com/lookalike");
+  await sandbox.fetch("https://api.company.com:8443/other-port");
   await sandbox.fetch("https://auth.company.com/token");
-  await sandbox.fetch("https://services.example.net/accounts");
   await new Promise((r) => setTimeout(r, 30));
   const lastWrite = calls.storageSets[calls.storageSets.length - 1];
-  assert.equal(lastWrite.recording.captured.length, 3, "all three requests were generated by the monitored page, regardless of which API host they target");
+  assert.deepEqual(Array.from(lastWrite.recording.captured, record => record.url), ["https://api.company.com/profile", "https://api.company.com/orders?view=all#recent"]);
+});
+
+test("API-origin recording filter cannot capture a matching API from an unrelated app", async () => {
+  const { sandbox, calls } = buildPageContext(recordingConfig({ type: "site", origin: "https://app.company.com" }, "https://api.company.com"), fakeOkResponse, { origin: "https://other-app.com", pathname: "/accounts" });
+  await new Promise((r) => setTimeout(r, 0));
+  await sandbox.fetch("https://api.company.com/profile");
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(calls.storageSets.length, 0);
 });
 
 // --- Runtime pipeline: recording started via a LATE config update (the page was already
@@ -677,7 +734,7 @@ for (const enabled of [false, true]) {
   for (const recordingActive of [false, true]) {
     for (const transport of ["fetch", "XHR"]) {
       test(transport + " Active=" + enabled + " Recording=" + recordingActive + " keeps observation independent", async () => {
-        const recording = recordingActive ? { active: true, name: "Matrix", flowId: "matrix", captured: [], monitorScope: { type: "global" } } : null;
+        const recording = recordingActive ? { active: true, name: "Matrix", flowId: "matrix", captured: [], monitorScope: { type: "global" }, apiOrigin: "https://api.example.com" } : null;
         const nativeResponse = { status: 200, headers: new Headers({ "content-type": "text/plain" }), clone: () => ({ text: async () => "REAL" }) };
         const { sandbox, calls } = buildPageContext({ enabled, rules: [RULE], recording }, nativeResponse);
         await new Promise(resolve => setTimeout(resolve, 0));

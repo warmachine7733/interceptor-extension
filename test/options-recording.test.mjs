@@ -126,6 +126,23 @@ test("flow editor opens Response first and switching tabs never writes saved dat
   assert.equal(JSON.stringify(ctx.getStoredData()), before);
 });
 
+test("Flow API-step search matches useful fields without mutating the flow", () => {
+  const ctx = buildOptionsContext();
+  const steps = [
+    { matcher: { method: "GET", urlPattern: "https://api.example.com/users/1" }, request: { url: "https://api.example.com/users/1" }, response: { status: 200 } },
+    { matcher: { method: "POST", urlPattern: "https://api.example.com/orders" }, pageContext: { pathname: "/flow/review" }, response: { status: 201 } }
+  ];
+  const snapshot = JSON.stringify(steps);
+  const matching = query => steps.filter(step => ctx.hooks.flowStepMatchesSearch(step, query));
+  assert.equal(matching("").length, 2);
+  assert.deepEqual(matching(" USERS "), [steps[0]]);
+  assert.deepEqual(matching("post"), [steps[1]]);
+  assert.deepEqual(matching("/flow/review"), [steps[1]]);
+  assert.deepEqual(matching("201"), [steps[1]]);
+  assert.equal(matching("missing").length, 0);
+  assert.equal(JSON.stringify(steps), snapshot);
+});
+
 test("cancel recording with no captured requests clears recording state and creates no flow", () => {
   const { hooks, getStoredData } = buildOptionsContext({ flows: [] });
   hooks.startRecordingFlow();
@@ -264,6 +281,7 @@ for (const mode of ["site", "page", "global"]) {
     ctx.click("#record-new-flow");
     ctx.setInput("#record-setup-name", "Test Recording");
     ctx.setInput("#record-setup-domain", "https://myapp.example.com:443/accounts?query=ignored#hash");
+    ctx.setInput("#record-setup-api-domain", "api.example.com");
     ctx.setInput("input[name='monitor-mode']:checked", mode);
     ctx.click("#record-setup-start");
     const saved = ctx.getStoredData();
@@ -273,6 +291,7 @@ for (const mode of ["site", "page", "global"]) {
     assert.ok(saved.recording.startedAt > 0);
     const expectedScope = mode === "global" ? { type: mode } : { type: mode, origin: "https://myapp.example.com", ...(mode === "page" ? { pathname: "/accounts" } : {}) };
     assert.deepEqual(JSON.parse(JSON.stringify(saved.recording.monitorScope)), expectedScope);
+    assert.equal(saved.recording.apiOrigin, "https://api.example.com");
     assert.deepEqual(saved.flows, [existing]);
     assert.equal(saved.activeFlowId, "existing");
     ctx.rerenderRoute();

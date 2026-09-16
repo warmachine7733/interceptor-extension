@@ -4,6 +4,10 @@
 
 
 
+
+## 1.2.5
+- Add API-domain recording filters and Flow-specific aggregated notifications
+
 ## 1.2.4
 - Keep each mock's published response tab independent and restore it after reload.
 
