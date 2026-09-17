@@ -1,18 +1,20 @@
 (() => {
   if (window.top !== window || window.__LOCAL_API_MOCK_REC_INDICATOR__) return;
   window.__LOCAL_API_MOCK_REC_INDICATOR__ = true;
-  const { scopeMatches, normalizeHosts } = window.ApiMockRules;
-  let watchedHosts = new Set();
-  const pageHost = (() => { try { return new URL(location.href || location.origin).host; } catch { return null; } })();
+  const { scopeMatches } = window.ApiMockRules;
   let recording = null;
+  let flows = [];
+  let extensionEnabled = false;
   let host = null;
+  let mode = null;
   let name = null;
   let count = null;
   const update = () => {
-    const eligible = recording?.active && watchedHosts.has(pageHost) && scopeMatches(recording.monitorScope, {
+    const recordingActive = recording?.active && scopeMatches(recording.monitorScope, {
       origin: location.origin, pathname: location.pathname
     });
-    if (!eligible) { host?.remove(); host = null; return; }
+    const servingFlow = extensionEnabled ? flows.find(flow => flow?.enabled) : null;
+    if (!recordingActive && !servingFlow) { host?.remove(); host = null; return; }
     if (!document.documentElement) return;
     if (!host) {
       host = document.createElement('div');
@@ -27,17 +29,26 @@
         .name { font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
         .count { color:#cbd5e1;font-size:11px; }
       </style><div class="card" role="status" aria-live="polite"><span class="rec"><span class="dot"></span>REC</span><span class="name"></span><span class="count"></span></div>`;
+      mode = shadow.querySelector('.rec');
       name = shadow.querySelector('.name');
       count = shadow.querySelector('.count');
       document.documentElement.appendChild(host);
     }
-    name.textContent = recording.name || 'Recording';
-    count.textContent = `${recording.captured?.length || 0} captured`;
+    if (recordingActive) {
+      mode.textContent = '● REC';
+      name.textContent = recording.name || 'Recording';
+      count.textContent = `${recording.captured?.length || 0} captured`;
+    } else {
+      mode.textContent = '● SERVING';
+      name.textContent = servingFlow.name || 'Flow';
+      count.textContent = `${servingFlow.steps?.length || 0} API${servingFlow.steps?.length === 1 ? '' : 's'} ready`;
+    }
   };
   window.addEventListener('message', event => {
     if (event.source !== window || event.data?.source !== 'local-api-mock' || event.data.type !== 'config') return;
     recording = event.data.config?.recording;
-    watchedHosts = new Set(normalizeHosts(event.data.config?.watchedHosts));
+    flows = Array.isArray(event.data.config?.flows) ? event.data.config.flows : [];
+    extensionEnabled = Boolean(event.data.config?.enabled);
     syncHistory();
     update();
   });
@@ -48,7 +59,7 @@
     historyHooks.push({ method, native, wrapper });
   }
   const syncHistory = () => {
-    const needed = recording?.active && watchedHosts.has(pageHost);
+    const needed = recording?.active || (extensionEnabled && flows.some(flow => flow?.enabled));
     for (const { method, native, wrapper } of historyHooks) {
       if (needed && history[method] === native) history[method] = wrapper;
       else if (!needed && history[method] === wrapper) history[method] = native;

@@ -147,14 +147,13 @@ function observedOrigins() {
   return [...origins];
 }
 
-// Lightweight hash routing: #/mocks (default/home), #/flows, #/flows/:flowId, #/settings.
+// Lightweight hash routing: #/mocks (default/home), #/flows, and #/flows/:flowId.
 // The hash is the source of truth for navigation (back/forward, refresh, deep links);
 // `state.view`/`state.flowEditorId` stay in sync with it but are not part of the
 // persisted schema themselves - only the derived `state.view` field is (as before).
 function routeHashForState() {
   if (state.view === "flows" && state.flowEditorId) return `#/flows/${encodeURIComponent(state.flowEditorId)}`;
   if (state.view === "flows") return "#/flows";
-  if (state.view === "settings") return "#/settings";
   return "#/mocks";
 }
 function syncHashWithState() {
@@ -172,9 +171,6 @@ function applyRouteFromHash() {
     state.flowEditorId = exists ? requestedId : null;
     state.flowSelectedStepIndex = 0;
     if (requestedId && !exists) syncHashWithState(); // deleted/invalid flow id - fall back to the flow list safely
-  } else if (segments[0] === "settings") {
-    state.view = "settings";
-    state.flowEditorId = null;
   } else {
     state.view = "mocks";
     state.flowEditorId = null;
@@ -661,12 +657,6 @@ function renderRecordingBanner(recording) {
 function render() {
   document.querySelectorAll(".top-nav-item").forEach(item => item.classList.toggle("top-nav-active", item.dataset.view === state.view));
   document.body.classList.toggle("view-flows", state.view === "flows");
-  document.body.classList.toggle("view-settings", state.view === "settings");
-  const settingsPanel = $("#settings-panel");
-  const rulesContainer = $(".rules-container");
-  if (settingsPanel) settingsPanel.hidden = state.view !== "settings";
-  if (rulesContainer) rulesContainer.hidden = state.view === "settings";
-  if (state.view === "settings") return;
   if (state.view === "flows") {
     renderFlows();
     return;

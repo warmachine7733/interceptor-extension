@@ -8,7 +8,6 @@ chrome.action.onClicked.addListener(() => {
 
 // Storage readers supply empty defaults. Do not write a stale install-time
 // snapshot over settings that the user may already have changed in Options.
-// A missing watchedHosts key is an empty watchlist, including on upgrades.
 
 // Tracks the last focused http(s) tab's origin/pathname so the options page can show the
 // real app URL in the Record Flow setup panel (an options.html page can't read this itself -
@@ -36,13 +35,9 @@ let recordingWriteQueue = Promise.resolve();
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== "recording-capture" || !sender.tab) return;
   recordingWriteQueue = recordingWriteQueue.then(async () => {
-    const { recording, watchedHosts } = await chrome.storage.local.get({ recording: null, watchedHosts: [] });
+    const { recording } = await chrome.storage.local.get({ recording: null });
     const record = message.record;
     if (!recording?.active || recording.flowId !== message.flowId || !record?.url || !record?.method) return;
-    // sender.url identifies the originating frame, unlike sender.tab.url (top frame).
-    if (!sender.url) return;
-    const url = new URL(sender.url);
-    if (!['http:', 'https:'].includes(url.protocol) || !watchedHosts.includes(url.host)) return;
     const captured = Array.isArray(recording.captured) ? recording.captured : [];
     if (captured.some((item) => item.id === record.id)) return;
     await chrome.storage.local.set({ recording: { ...recording, captured: [...captured, record] } });

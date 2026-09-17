@@ -5,11 +5,7 @@
   let config = { enabled: false, rules: [], flows: [], activeFlowId: null, recording: null };
   // rules.js is always loaded before this script (see manifest.json content_scripts
   // ordering, both worlds), so ApiMockRules is the single canonical matcher implementation.
-  const { firstMatch, firstFlowMatch, flowStepMatches, parseHeaders, resetFlowReplayState, scopeMatches, normalizeHosts } = window.ApiMockRules;
-  let watchedHosts = new Set();
-  const pageIsWatched = () => {
-    try { return watchedHosts.has(new URL(location.href).host); } catch { return false; }
-  };
+  const { firstMatch, firstFlowMatch, flowStepMatches, parseHeaders, resetFlowReplayState, scopeMatches } = window.ApiMockRules;
   const requestUrl = value => {
     try {
       const url = new URL(value, location.href);
@@ -63,7 +59,7 @@
   };
 
   const storageRecord = (record) => {
-    if (!config.recording?.active || !record || !pageIsWatched()) return;
+    if (!config.recording?.active || !record) return;
     const allowed = shouldCaptureForRecording({ ...record.pageContext, requestUrl: record.url }, config.recording);
     if (!allowed) return;
     window.postMessage({ source: "local-api-mock", type: "recording-capture", flowId: config.recording.flowId, record }, "*");
@@ -85,7 +81,9 @@
       if (!nextFlows.some((flow) => flow.id === id)) resetFlowReplayState(id);
     }
     config = { ...config, ...nextConfig };
-    watchedHosts = new Set(normalizeHosts(config.watchedHosts));
+    // Static iframes may have been parsed before the asynchronous configuration
+    // response arrived; inspect them again once manual rules are available.
+    if (typeof document !== "undefined") document.querySelectorAll?.("iframe[src]").forEach(frame => mockIframeNavigation(frame, frame.src));
   });
   window.postMessage({ source: "local-api-mock", type: "get-config" }, "*");
 
@@ -207,9 +205,33 @@
     } catch { /* best-effort UI notification */ }
   };
   const showMatchedToast = (rule, url, method) => {
-    if (rule?.source === "flow") showFlowToast(rule);
+    // A snackbar inside a sandboxed/hidden iframe is not visible to the user. Relay
+    // it to the top document, which has the same interceptor installed.
+    if (window.top && window.top !== window) {
+      window.top.postMessage({
+        source: "local-api-mock",
+        type: "iframe-mock-toast",
+        detail: { id: rule?.id, flowId: rule?.flowId, name: rule?.name, source: rule?.source, responseEnabled: Boolean(responseForRule(rule)?.enabled), url, method }
+      }, "*");
+      return;
+    }
+    // A serving Flow has a persistent top-page indicator. Do not create a toast for
+    // every replayed request.
+    if (rule?.source === "flow") return;
     else showRuleToast(rule, url, method);
   };
+  window.addEventListener("message", (event) => {
+    if (event.data?.source !== "local-api-mock" || event.data?.type !== "iframe-mock-toast" || event.source === window) return;
+    // Bubble from nested iframes until the visible top-level document renders it.
+    if (window.top && window.top !== window) {
+      window.top.postMessage(event.data, "*");
+      return;
+    }
+    const detail = event.data.detail || {};
+    const rule = { id: detail.id, flowId: detail.flowId, name: detail.name, source: detail.source, response: { enabled: detail.responseEnabled } };
+    if (rule.source === "flow") showFlowToast(rule);
+    else showRuleToast(rule, detail.url, detail.method);
+  });
   const applyRequestOverride = async (request, override = {}) => {
     const headers = new Headers(request.headers);
     for (const [key, value] of Object.entries(parseHeaders(override.headers))) {
@@ -229,6 +251,60 @@
     const status = Number(response.status) || 200;
     return new Response([204, 205, 304].includes(status) ? null : (response.body ?? ""), { status, statusText: response.statusText || "", headers });
   };
+
+  // iframe src is a document navigation (always GET), not fetch/XHR. For a matching
+  // manual response, replace the document with srcdoc before the browser performs the
+  // native navigation. This intentionally applies only to My Mocks: Flow sequencing is
+  // request-driven and cannot be represented by a document navigation.
+  const iframeMocked = new WeakSet();
+  const escapeHtml = value => String(value ?? "").replace(/[&<>"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]));
+  const iframeDocument = response => {
+    const headers = parseHeaders(response?.headers);
+    const contentType = String(headers["content-type"] || headers["Content-Type"] || "").toLowerCase();
+    if (/\btext\/html\b/.test(contentType)) return String(response?.body ?? "");
+    return `<!doctype html><meta charset="utf-8"><pre>${escapeHtml(response?.body)}</pre>`;
+  };
+  const mockIframeNavigation = (frame, rawUrl) => {
+    if (!config.enabled || iframeMocked.has(frame)) return false;
+    const url = requestUrl(rawUrl);
+    if (!url) return false;
+    const rule = firstMatch(config.rules, url, "GET");
+    const response = responseForRule(rule);
+    if (!response?.enabled) return false;
+    iframeMocked.add(frame);
+    log("GET", url, rule);
+    showMatchedToast(rule, url, "GET");
+    frame.srcdoc = iframeDocument(response);
+    return true;
+  };
+  const installIframeNavigationInterceptor = () => {
+    if (typeof HTMLIFrameElement === "undefined") return;
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, "src");
+    if (descriptor?.get && descriptor?.set) {
+      Object.defineProperty(HTMLIFrameElement.prototype, "src", {
+        configurable: true,
+        enumerable: descriptor.enumerable,
+        get: descriptor.get,
+        set(value) { if (!mockIframeNavigation(this, value)) descriptor.set.call(this, value); }
+      });
+    }
+    const nativeSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      if (this instanceof HTMLIFrameElement && String(name).toLowerCase() === "src" && mockIframeNavigation(this, value)) return;
+      return nativeSetAttribute.call(this, name, value);
+    };
+    const inspectFrame = frame => {
+      if (frame?.src && !iframeMocked.has(frame)) mockIframeNavigation(frame, frame.src);
+    };
+    if (typeof MutationObserver !== "undefined" && typeof document !== "undefined") {
+      new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
+        if (node instanceof HTMLIFrameElement) inspectFrame(node);
+        node?.querySelectorAll?.("iframe[src]").forEach(inspectFrame);
+      }))).observe(document.documentElement, { childList: true, subtree: true });
+      document.querySelectorAll?.("iframe[src]").forEach(inspectFrame);
+    }
+  };
+  installIframeNavigationInterceptor();
 
   const captureFetchRecord = async (request, response) => {
     if (!config.recording?.active || !request || !response || shouldIgnoreRecordingUrl(request.url)) return;
@@ -258,7 +334,7 @@
   window.fetch = function (...args) {
     const [input, init] = args;
     const pass = () => Reflect.apply(nativeFetch, this, args);
-    if ((!config.enabled && !config.recording?.active) || !pageIsWatched()) return pass();
+    if (!config.enabled && !config.recording?.active) return pass();
     // Do not coerce arbitrary objects twice or construct a Request for unlisted hosts.
     const rawUrl = typeof input === 'string' || input instanceof URL ? input : input instanceof Request ? input.url : null;
     const url = rawUrl === null ? null : requestUrl(rawUrl);
@@ -325,7 +401,7 @@
       for (const key of ['readyState', 'status', 'statusText', 'responseText', 'response', 'getResponseHeader', 'getAllResponseHeaders']) delete this[key];
     }
     meta.delete(this);
-    if ((!config.enabled && !config.recording?.active) || !pageIsWatched()) return nativeOpen.apply(this, arguments);
+    if (!config.enabled && !config.recording?.active) return nativeOpen.apply(this, arguments);
     const absoluteUrl = (typeof url === 'string' || url instanceof URL) ? requestUrl(url) : null;
     if (!absoluteUrl) return nativeOpen.apply(this, arguments);
     if (!config.enabled && !shouldCaptureForRecording(currentPageContext(), config.recording)) return nativeOpen.apply(this, arguments);
@@ -343,7 +419,7 @@
   };
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
     const details = meta.get(this);
-    if (!details || !config.enabled || !pageIsWatched()) return nativeSetRequestHeader.apply(this, arguments);
+    if (!details || !config.enabled) return nativeSetRequestHeader.apply(this, arguments);
     const overrides = parseHeaders(details?.override?.headers);
     const overrideKey = Object.keys(overrides).find((key) => key.toLowerCase() === name.toLowerCase());
     if (overrideKey && (overrides[overrideKey] === null || overrides[overrideKey] === "")) return;
@@ -356,7 +432,7 @@
   };
   XMLHttpRequest.prototype.send = function (body) {
     const details = meta.get(this);
-    if (!details || !pageIsWatched() || (!config.enabled && !shouldCaptureForRecording(currentPageContext(), config.recording))) return nativeSend.apply(this, arguments);
+    if (!details || (!config.enabled && !shouldCaptureForRecording(currentPageContext(), config.recording))) return nativeSend.apply(this, arguments);
     if (shouldCaptureForRecording(currentPageContext(), config.recording) && !shouldIgnoreRecordingUrl(details?.url || "")) {
       const record = {
         id: crypto.randomUUID(),

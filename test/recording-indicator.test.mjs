@@ -14,7 +14,7 @@ function setup() {
       addEventListener() {},
       createElement() {
         return { style: {}, remove() { mounted = null; }, attachShadow() {
-          const nodes = { '.name': {}, '.count': {} };
+          const nodes = { '.rec': {}, '.name': {}, '.count': {} };
           this.shadowRoot = { querySelector: selector => nodes[selector] };
           return this.shadowRoot;
         } };
@@ -34,16 +34,14 @@ function setup() {
   };
 }
 const recording = (monitorScope) => ({ active: true, name: 'Customer journey', captured: [], monitorScope });
-test('unwatched pages keep native history and receive no recording UI', () => {
+test('recording shows its UI without a configured domain', () => {
   const ctx = setup();
   const push = ctx.sandbox.history.pushState;
   const replace = ctx.sandbox.history.replaceState;
   ctx.send(recording({ type: 'global' }), true, []);
-  assert.equal(ctx.get(), null);
-  assert.equal(ctx.sandbox.history.pushState, push);
-  assert.equal(ctx.sandbox.history.replaceState, replace);
-  ctx.send(recording({ type: 'global' }));
+  assert.equal(ctx.get().id, 'local-api-mock-rec-indicator');
   assert.notEqual(ctx.sandbox.history.pushState, push);
+  assert.notEqual(ctx.sandbox.history.replaceState, replace);
   ctx.send(null);
   assert.equal(ctx.sandbox.history.pushState, push);
 });

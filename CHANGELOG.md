@@ -1,5 +1,9 @@
 # Release Log
 
+## 1.2.8
+- Remove domain restrictions for manual mocks, Flow replay, and Flow recording; Flow context is selected when recording starts.
+- Intercept fetch/XHR calls made inside sandboxed `srcdoc` and `about:blank` iframes, including opaque-origin sandboxed frames.
+
 
 
 

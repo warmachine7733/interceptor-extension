@@ -1,10 +1,9 @@
 # Extension Testing Guide
 
-## Watched Domains regressions
+## All-sites coverage
 
-Before testing mocks or recording, explicitly add the originating page/application host in
-**Watched Domains**. Missing/empty watchlists opt out every host, including on
-upgrade. Existing mocks and flows are preserved.
+Manual mocks, Flow replay, and recording apply to every page and iframe while the
+master toggle is Active. Recording scopes are selected when starting a Flow.
 
 `npm test` includes the exact-host pass-through matrix in
 `test/watchlist.test.mjs`: empty/missing lists, unrelated hosts, private IPs,

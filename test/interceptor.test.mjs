@@ -178,7 +178,7 @@ test("fetch is intercepted and mocked", async () => {
   assert.equal(body, '{"mocked":true}');
 });
 
-test("Flow replay aggregates a burst by flow while My Mocks keep their individual toasts", async () => {
+test("Flow replay emits no per-request toasts while My Mocks keep their individual toasts", async () => {
   const flow = {
     id: "pc-auth", name: "PC Auth", enabled: true,
     steps: ["profile", "address", "preferences"].map((path, index) => ({ id: path, order: index, enabled: true, matcher: { method: "GET", urlPattern: `https://api.example.com/${path}` }, response: { status: 200, body: path } }))
@@ -191,24 +191,22 @@ test("Flow replay aggregates a burst by flow while My Mocks keep their individua
   await sandbox.fetch("https://api.example.com/manual-two");
   await new Promise(resolve => setTimeout(resolve, 190));
   const flowToasts = calls.flowToasts();
-  assert.equal(flowToasts.length, 1);
-  assert.equal(flowToasts[0].children[0].textContent, "✓ PC Auth");
-  assert.equal(flowToasts[0].children[1].textContent, "3 APIs mocked");
+  assert.equal(flowToasts.length, 0);
   const mockContainer = calls.pageToastContainers().find(container => container.id !== "local-api-mock-flow-toasts");
   assert.equal(mockContainer.children.length, 2, "My Mocks remain individual and are not absorbed by Flow aggregation");
   assert.equal(await (await sandbox.fetch("https://api.example.com/profile")).text(), "profile", "presentation does not affect replay responses");
   await new Promise(resolve => setTimeout(resolve, 190));
-  assert.equal(calls.flowToasts().length, 2, "a later Flow burst gets a new snackbar");
+  assert.equal(calls.flowToasts().length, 0);
 });
 
-test("different Flows and a single Flow request each produce independent Flow snackbars", async () => {
+test("different Flows do not produce per-request snackbars", async () => {
   const makeFlow = (id, name) => ({ id, name, enabled: true, steps: [{ id: `${id}-step`, enabled: true, matcher: { method: "GET", urlPattern: `https://api.example.com/${id}` }, response: { status: 200, body: id } }] });
   const { sandbox, calls } = buildPageContext({ enabled: true, toastTest: true, rules: [], flows: [makeFlow("auth", "PC Auth"), makeFlow("checkout", "Checkout")] });
   await new Promise(resolve => setTimeout(resolve, 0));
   await sandbox.fetch("https://api.example.com/auth");
   await sandbox.fetch("https://api.example.com/checkout");
   await new Promise(resolve => setTimeout(resolve, 190));
-  assert.deepEqual(Array.from(calls.flowToasts(), toast => [toast.children[0].textContent, toast.children[1].textContent]), [["✓ PC Auth", "1 API mocked"], ["✓ Checkout", "1 API mocked"]]);
+  assert.deepEqual(Array.from(calls.flowToasts()), []);
 });
 
 test("fetch uses the published response variant by default", async () => {
